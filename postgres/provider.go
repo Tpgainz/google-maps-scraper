@@ -1,10 +1,9 @@
 package postgres
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -21,6 +20,16 @@ const (
 )
 
 var _ scrapemate.JobProvider = (*provider)(nil)
+
+type JSONJob struct {
+    ID         string                 `json:"id"`
+    Priority   int                    `json:"priority"`
+    URL        string                 `json:"url"`
+    URLParams  map[string]string      `json:"url_params"`
+    MaxRetries int                    `json:"max_retries"`
+    JobType    string                 `json:"job_type"`    // "search" ou "place"
+    Metadata   map[string]interface{} `json:"metadata"`    // données spécifiques au type
+}
 
 type provider struct {
 	db      *sql.DB
@@ -82,38 +91,47 @@ func (p *provider) Jobs(ctx context.Context) (<-chan scrapemate.IJob, <-chan err
 
 // Push pushes a job to the job provider
 func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
-	q := `INSERT INTO gmaps_jobs
-		(id, priority, payload_type, payload, created_at, status)
-		VALUES
-		($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`
+    q := `INSERT INTO gmaps_jobs
+        (id, priority, payload_type, payload, created_at, status)
+        VALUES
+        ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`
 
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
+    jsonJob := &JSONJob{
+        ID:         job.GetID(),
+        Priority:   job.GetPriority(),
+        URL:        job.GetURL(),
+        URLParams:  job.GetURLParams(),
+        MaxRetries: job.GetMaxRetries(),
+    }
 
-	var payloadType string
+    switch j := job.(type) {
+    case *gmaps.GmapJob:
+        jsonJob.JobType = "search"
+        jsonJob.Metadata = map[string]interface{}{
+            "max_depth":     j.MaxDepth,
+            "lang_code":     j.LangCode,
+            "extract_email": j.ExtractEmail,
+        }
+    case *gmaps.PlaceJob:
+        jsonJob.JobType = "place"
+        jsonJob.Metadata = map[string]interface{}{
+            "usage_in_results": j.UsageInResultststs,
+            "extract_email":    j.ExtractEmail,
+        }	
+    default:
+        return errors.New("invalid job type")
+    }
 
-	switch j := job.(type) {
-	case *gmaps.GmapJob:
-		payloadType = "search"
+    payload, err := json.Marshal(jsonJob)
+    if err != nil {
+        return fmt.Errorf("failed to marshal job: %w", err)
+    }
 
-		if err := enc.Encode(j); err != nil {
-			return err
-		}
-	case *gmaps.PlaceJob:
-		payloadType = "place"
+    _, err = p.db.ExecContext(ctx, q,
+        job.GetID(), job.GetPriority(), jsonJob.JobType, payload, time.Now().UTC(), statusNew,
+    )
 
-		if err := enc.Encode(j); err != nil {
-			return err
-		}
-	default:
-		return errors.New("invalid job type")
-	}
-
-	_, err := p.db.ExecContext(ctx, q,
-		job.GetID(), job.GetPriority(), payloadType, buf.Bytes(), time.Now().UTC(), statusNew,
-	)
-
-	return err
+    return err
 }
 
 func (p *provider) fetchJobs(ctx context.Context) {
@@ -214,31 +232,60 @@ func (p *provider) fetchJobs(ctx context.Context) {
 	}
 }
 
-type encjob struct {
-	Type string
-	Data scrapemate.IJob
+func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
+    var jsonJob JSONJob
+    if err := json.Unmarshal(payload, &jsonJob); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal job: %w", err)
+    }
+
+    switch payloadType {
+    case "search":
+        maxDepth, err := getIntFromMetadata(jsonJob.Metadata, "max_depth")
+        if err != nil {
+            return nil, fmt.Errorf("failed to get max_depth: %w", err)
+        }
+        
+        job := &gmaps.GmapJob{
+            Job: scrapemate.Job{
+                ID:         jsonJob.ID,
+                URL:        jsonJob.URL,
+                URLParams:  jsonJob.URLParams,
+                MaxRetries: jsonJob.MaxRetries,
+                Priority:   jsonJob.Priority,
+            },
+            MaxDepth:     maxDepth,
+            LangCode:     jsonJob.Metadata["lang_code"].(string),
+            ExtractEmail: jsonJob.Metadata["extract_email"].(bool),
+        }
+        return job, nil
+    case "place":
+        job := &gmaps.PlaceJob{
+            Job: scrapemate.Job{
+                ID:         jsonJob.ID,
+                URL:        jsonJob.URL,
+                URLParams:  jsonJob.URLParams,
+                MaxRetries: jsonJob.MaxRetries,
+                Priority:   jsonJob.Priority,
+            },
+            UsageInResultststs: jsonJob.Metadata["usage_in_results"].(bool),
+            ExtractEmail:       jsonJob.Metadata["extract_email"].(bool),
+        }
+        return job, nil
+    default:
+        return nil, fmt.Errorf("invalid payload type: %s", payloadType)
+    }
 }
 
-func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
-	buf := bytes.NewBuffer(payload)
-	dec := gob.NewDecoder(buf)
-
-	switch payloadType {
-	case "search":
-		j := new(gmaps.GmapJob)
-		if err := dec.Decode(j); err != nil {
-			return nil, fmt.Errorf("failed to decode search job: %w", err)
-		}
-
-		return j, nil
-	case "place":
-		j := new(gmaps.PlaceJob)
-		if err := dec.Decode(j); err != nil {
-			return nil, fmt.Errorf("failed to decode place job: %w", err)
-		}
-
-		return j, nil
-	default:
-		return nil, fmt.Errorf("invalid payload type: %s", payloadType)
-	}
+func getIntFromMetadata(metadata map[string]interface{}, key string) (int, error) {
+    value, ok := metadata[key]
+    if !ok {
+        return 0, fmt.Errorf("missing key %s in metadata", key)
+    }
+    
+    floatValue, ok := value.(float64)
+    if !ok {
+        return 0, fmt.Errorf("value for key %s is not a number", key)
+    }
+    
+    return int(floatValue), nil
 }

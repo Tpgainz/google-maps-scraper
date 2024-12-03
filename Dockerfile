@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && go install github.com/playwright-community/playwright-go/cmd/playwright@latest \
     && mkdir -p /opt/browsers \
+    && mkdir -p /opt/ms-playwright-go \
+    && cp $(go env GOPATH)/bin/playwright /opt/ms-playwright-go/ \
     && playwright install chromium --with-deps \
     && rm -rf /root/.cache/* /root/.npm/*
 

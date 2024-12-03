@@ -13,5 +13,4 @@ BEGIN;
 
     ALTER TABLE results 
         ADD COLUMN data JSONB NOT NULL;
-
 COMMIT;
