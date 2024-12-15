@@ -17,6 +17,7 @@ import (
 const (
 	statusNew    = "new"
 	statusQueued = "queued"
+	statusDone   = "done"
 )
 
 var _ scrapemate.JobProvider = (*provider)(nil)
