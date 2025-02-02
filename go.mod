@@ -1,4 +1,4 @@
-module github.com/gosom/google-maps-scraper
+module github.com/tpgainz/google-maps-scraper
 
 go 1.23
 
