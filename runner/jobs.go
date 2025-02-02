@@ -9,10 +9,10 @@ import (
 	"plugin"
 	"strings"
 
-	"github.com/gosom/google-maps-scraper/deduper"
-	"github.com/gosom/google-maps-scraper/exiter"
-	"github.com/gosom/google-maps-scraper/gmaps"
 	"github.com/gosom/scrapemate"
+	"github.com/tpgainz/google-maps-scraper/deduper"
+	"github.com/tpgainz/google-maps-scraper/exiter"
+	"github.com/tpgainz/google-maps-scraper/gmaps"
 )
 
 func CreateSeedJobs(

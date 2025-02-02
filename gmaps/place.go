@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/gosom/google-maps-scraper/exiter"
 	"github.com/gosom/scrapemate"
 	"github.com/playwright-community/playwright-go"
+	"github.com/tpgainz/google-maps-scraper/exiter"
 )
 
 type PlaceJobOptions func(*PlaceJob)

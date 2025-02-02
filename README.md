@@ -1,6 +1,7 @@
 # Google maps scraper
-![build](https://github.com/gosom/google-maps-scraper/actions/workflows/build.yml/badge.svg)
-[![Go Report Card](https://goreportcard.com/badge/github.com/gosom/google-maps-scraper)](https://goreportcard.com/report/github.com/gosom/google-maps-scraper)
+
+![build](https://github.com/tpgainz/google-maps-scraper/actions/workflows/build.yml/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/tpgainz/google-maps-scraper)](https://goreportcard.com/report/github.com/tpgainz/google-maps-scraper)
 
 > A command line and web UI google maps scraper
 
@@ -40,11 +41,10 @@
 [![Evomi Banner](https://my.evomi.com/images/brand/cta.png)](https://evomi.com?utm_source=github&utm_medium=banner&utm_campaign=gosom-maps)
 
 ---
+
 ## Try it
 
-
-
-A command line and web based google maps scraper build using 
+A command line and web based google maps scraper build using
 
 [scrapemate](https://github.com/gosom/scrapemate) web crawling framework.
 
@@ -53,21 +53,17 @@ customize it to your needs
 
 ![Example GIF](img/example.gif)
 
-
 ### Web UI:
-
-
 
 ```
 mkdir -p gmapsdata && docker run -v $PWD/gmapsdata:/gmapsdata -p 8080:8080 gosom/google-maps-scraper -data-folder /gmapsdata
 ```
 
-Or dowload the [binary](https://github.com/gosom/google-maps-scraper/releases) for your platform and run it.
+Or dowload the [binary](https://github.com/tpgainz/google-maps-scraper/releases) for your platform and run it.
 
 Note: Even if you add one keyword the results will come in at least 3 minutes. This is a minimum configured runtime
 
 Note: for MacOS the docker command should not work. **HELP REQUIRED**
-
 
 ### Command line:
 
@@ -79,18 +75,16 @@ file `results.csv` will contain the parsed results.
 
 **If you want emails use additionally the `-email` parameter**
 
-
 ## 🌟 Support the Project!
 
-If you find this tool useful, consider giving it a **star** on GitHub. 
-Feel free to check out the **Sponsor** button on this repository to see how you can further support the development of this project. 
+If you find this tool useful, consider giving it a **star** on GitHub.
+Feel free to check out the **Sponsor** button on this repository to see how you can further support the development of this project.
 Your support helps ensure continued improvement and maintenance.
-
 
 ## Features
 
 - Extracts many data points from google maps
-- Exports the data to CSV, JSON or PostgreSQL 
+- Exports the data to CSV, JSON or PostgreSQL
 - Perfomance about 120 urls per minute (-depth 1 -c 8)
 - Extendable to write your own exporter
 - Dockerized for easy run in multiple platforms
@@ -101,18 +95,16 @@ Your support helps ensure continued improvement and maintenance.
 
 ## Notes on email extraction
 
-By defaul email extraction is disabled. 
+By defaul email extraction is disabled.
 
-If you enable email extraction (see quickstart) then the scraper will visit the 
+If you enable email extraction (see quickstart) then the scraper will visit the
 website of the business (if exists) and it will try to extract the emails from the
 page.
 
-For the moment it only checks only one page of the website (the one that is registered in Gmaps). At some point, it will be added support to try to extract from other pages like about, contact, impressum etc. 
-
+For the moment it only checks only one page of the website (the one that is registered in Gmaps). At some point, it will be added support to try to extract from other pages like about, contact, impressum etc.
 
 Keep in mind that enabling email extraction results to larger processing time, since more
-pages are scraped. 
-
+pages are scraped.
 
 ## Extracted Data Points
 
@@ -172,14 +164,12 @@ file `results.csv` will contain the parsed results.
 
 **If you want emails use additionally the `-email` parameter**
 
-
 ### On your host
 
 (tested only on Ubuntu 22.04)
 
-
 ```
-git clone https://github.com/gosom/google-maps-scraper.git
+git clone https://github.com/tpgainz/google-maps-scraper.git
 cd google-maps-scraper
 go mod download
 go build
@@ -255,7 +245,7 @@ try `./google-maps-scraper -h` to see the command line options available:
 
 In cases the results need to be written in a custom format or in another system like a db a message queue or basically anything the Go plugin system can be utilized.
 
-Write a Go plugin (see an example in examples/plugins/example_writeR.go) 
+Write a Go plugin (see an example in examples/plugins/example_writeR.go)
 
 Compile it using (for Linux):
 
@@ -263,15 +253,14 @@ Compile it using (for Linux):
 go build -buildmode=plugin -tags=plugin -o ~/mytest/plugins/example_writer.so examples/plugins/example_writer.go
 ```
 
-and then run the program using the `-writer` argument. 
+and then run the program using the `-writer` argument.
 
 See an example:
 
 1. Write your plugin (use the examples/plugins/example_writer.go as a reference)
 2. Build your plugin `go build -buildmode=plugin -tags=plugin -o ~/myplugins/example_writer.so plugins/example_writer.go`
-3. Download the lastes [release](https://github.com/gosom/google-maps-scraper/releases/) or build the program
+3. Download the lastes [release](https://github.com/tpgainz/google-maps-scraper/releases/) or build the program
 4. Run the program like `./google-maps-scraper -writer ~/myplugins:DummyPrinter -input example-queries.txt`
-
 
 ### Plugins and Docker
 
@@ -282,7 +271,6 @@ otherwise you will encounter an error like:
 ```
 /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.32' not found (required by /plugins/example_writer.so)
 ```
-
 
 ## Using Database Provider (postgreSQL)
 
@@ -310,7 +298,7 @@ go run main.go -dsn "postgres://postgres:postgres@localhost:5432/postgres" -prod
 
 (configure your queries and the desired language)
 
-This will populate the table `gmaps_jobs` . 
+This will populate the table `gmaps_jobs` .
 
 you may run the scraper using:
 
@@ -351,14 +339,14 @@ spec:
         args: ["-c", "1", "-depth", "10", "-dsn", "postgres://{DBUSER}:{DBPASSWD@DBHOST}:{DBPORT}/{DBNAME}", "-lang", "{LANGUAGE_CODE}"]
 ```
 
-Please replace the values or the command args accordingly 
+Please replace the values or the command args accordingly
 
-Note: Keep in mind that because the application starts a headless browser it requires CPU and memory. 
+Note: Keep in mind that because the application starts a headless browser it requires CPU and memory.
 Use an appropriate kubernetes cluster
 
 ## Telemetry
 
-Anonymous usage statistics are collected for debug and improvement reasons. 
+Anonymous usage statistics are collected for debug and improvement reasons.
 You can opt out by setting the env variable `DISABLE_TELEMETRY=1`
 
 ## Perfomance
@@ -366,8 +354,8 @@ You can opt out by setting the env variable `DISABLE_TELEMETRY=1`
 Expected speed with concurrency of 8 and depth 1 is 120 jobs/per minute.
 Each search is 1 job + the number or results it contains.
 
-Based on the above: 
-if we have 1000 keywords to search with each contains 16 results => 1000 * 16 = 16000 jobs.
+Based on the above:
+if we have 1000 keywords to search with each contains 16 results => 1000 \* 16 = 16000 jobs.
 
 We expect this to take about 16000/120 ~ 133 minutes ~ 2.5 hours
 
@@ -382,20 +370,15 @@ For more instruction you may also read the following links
 - https://blog.gkomninos.com/distributed-google-maps-scraping
 - https://github.com/omkarcloud/google-maps-scraper/tree/master (also a nice project) [many thanks for the idea to extract the data by utilizing the JS objects]
 
-
 ## Licence
 
 This code is licenced under the MIT Licence
-
 
 ## Contributing
 
 Please open an ISSUE or make a Pull Request
 
-
 Thank you for considering support for the project. Every bit of assistance helps maintain momentum and enhances the scraper’s capabilities!
-
-
 
 ## Notes
 
@@ -419,7 +402,6 @@ banner is generated using OpenAI's DALE
 
 [![Evomi Banner](https://my.evomi.com/images/brand/cta.png)](https://evomi.com?utm_source=github&utm_medium=banner&utm_campaign=gosom-maps)
 
-
 <div align="center">
 	<p>
 		<a href="https://www.capsolver.com/?utm_source=github&utm_medium=banner_repo&utm_campaign=scraping&utm_term=giorgos" rel="nofollow">
@@ -440,8 +422,5 @@ banner is generated using OpenAI's DALE
 		<br>
 	</p>
 </div>
-
-
-
 
 If you register via the links on my page I may get a commission. This is another way to support my work
