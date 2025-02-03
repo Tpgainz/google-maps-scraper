@@ -1,0 +1,5 @@
+services:
+  scraper:
+    build: .
+    command: -dsn "postgres://postgres:postgres@host.docker.internal:5432/postgres" -c 2 -depth 10
+    restart: unless-stopped

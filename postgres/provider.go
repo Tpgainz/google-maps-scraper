@@ -233,11 +233,21 @@ func (p *provider) fetchJobs(ctx context.Context) {
 }
 
 func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
+
+	
+    // If the payload is a string, we need to unmarshal it first
+    var rawJSON string
+    err := json.Unmarshal(payload, &rawJSON)
+    if err == nil {
+        // If it was a string, use the unmarshaled content
+        payload = []byte(rawJSON)
+    }
+    
     var jsonJob JSONJob
     if err := json.Unmarshal(payload, &jsonJob); err != nil {
         return nil, fmt.Errorf("failed to unmarshal job: %w", err)
     }
-
+    
     switch payloadType {
     case "search":
         maxDepth, err := getIntFromMetadata(jsonJob.Metadata, "max_depth")
