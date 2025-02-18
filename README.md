@@ -282,6 +282,8 @@ docker-compose -f docker-compose.dev.yaml up -d
 
 The above starts a PostgreSQL contains and creates the required tables
 
+
+
 to access db:
 
 ```
@@ -293,7 +295,11 @@ Password is `postgres`
 Then from your host run:
 
 ```
-go run main.go -dsn "postgres://postgres:postgres@localhost:5432/postgres" -produce -input example-queries.txt --lang el
+docker build -t my-google-maps-scraper .
+```
+
+```
+docker run my-google-maps-scraper -dsn "postgres://postgres:postgres@host.docker.internal:5432/postgres" -c 2 -depth 1
 ```
 
 (configure your queries and the desired language)
