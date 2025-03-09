@@ -17,9 +17,14 @@ import (
 	"github.com/tpgainz/google-maps-scraper/tlmt"
 )
 
+type ExtendedJobProvider interface {
+	scrapemate.JobProvider
+	MarkDone(ctx context.Context, job scrapemate.IJob) error
+}
+
 type dbrunner struct {
 	cfg      *runner.Config
-	provider scrapemate.JobProvider
+	provider ExtendedJobProvider
 	produce  bool
 	app      *scrapemateapp.ScrapemateApp
 	conn     *sql.DB
@@ -35,9 +40,15 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 		return nil, err
 	}
 
+	provider := postgres.NewProvider(conn)
+	extendedProvider, ok := provider.(ExtendedJobProvider)
+	if !ok {
+		return nil, fmt.Errorf("provider does not implement ExtendedJobProvider interface")
+	}
+
 	ans := dbrunner{
 		cfg:      cfg,
-		provider: postgres.NewProvider(conn),
+		provider: extendedProvider,
 		produce:  cfg.ProduceOnly,
 		conn:     conn,
 	}
@@ -57,6 +68,12 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 		scrapemateapp.WithConcurrency(cfg.Concurrency),
 		scrapemateapp.WithProvider(ans.provider),
 		scrapemateapp.WithExitOnInactivity(cfg.ExitOnInactivityDuration),
+		scrapemateapp.WithJobDoneCallback(func(ctx context.Context, job scrapemate.IJob) {
+			if err := ans.provider.MarkDone(ctx, job); err != nil {
+				log := scrapemate.GetLoggerFromContext(ctx)
+				log.Error(fmt.Sprintf("failed to mark job as done: %v", err))
+			}
+		}),
 	}
 
 	if len(cfg.Proxies) > 0 {
