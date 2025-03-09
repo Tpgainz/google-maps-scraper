@@ -300,9 +300,3 @@ func getIntFromMetadata(metadata map[string]interface{}, key string) (int, error
     
     return int(floatValue), nil
 }
-
-func (p *provider) MarkDone(ctx context.Context, job scrapemate.IJob) error {
-	q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
-	_, err := p.db.ExecContext(ctx, q, statusDone, job.GetID())
-	return err
-}
