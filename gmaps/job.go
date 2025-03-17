@@ -19,11 +19,9 @@ type GmapJobOptions func(*GmapJob)
 
 type GmapJob struct {
 	scrapemate.Job
-
 	MaxDepth     int
 	LangCode     string
 	ExtractEmail bool
-
 	Deduper     deduper.Deduper
 	ExitMonitor exiter.Exiter
 }

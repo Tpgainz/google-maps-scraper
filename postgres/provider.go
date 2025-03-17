@@ -18,6 +18,7 @@ const (
 	statusNew    = "new"
 	statusQueued = "queued"
 	statusDone   = "done"
+	statusFailed = "failed"
 )
 
 var _ scrapemate.JobProvider = (*provider)(nil)
@@ -51,6 +52,35 @@ func NewProvider(db *sql.DB) scrapemate.JobProvider {
 	return &prov
 }
 
+type jobWrapper struct {
+    scrapemate.IJob
+    provider *provider
+}
+
+func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (any, []scrapemate.IJob, error) {
+    data, nextJobs, err := w.IJob.Process(ctx, resp)
+    
+    if err == nil {
+        _ = w.provider.MarkDone(ctx, w.IJob)
+    } else {
+        _ = w.provider.MarkFailed(ctx, w.IJob)
+    }
+    
+    return data, nextJobs, err
+}
+
+func (p *provider) MarkDone(ctx context.Context, job scrapemate.IJob) error {
+    q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
+    _, err := p.db.ExecContext(ctx, q, statusDone, job.GetID())
+    return err
+}
+
+func (p *provider) MarkFailed(ctx context.Context, job scrapemate.IJob) error {
+    q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
+    _, err := p.db.ExecContext(ctx, q, statusFailed, job.GetID())
+    return err
+}
+
 //nolint:gocritic // it contains about unnamed results
 func (p *provider) Jobs(ctx context.Context) (<-chan scrapemate.IJob, <-chan error) {
 	outc := make(chan scrapemate.IJob)
@@ -78,8 +108,14 @@ func (p *provider) Jobs(ctx context.Context) (<-chan scrapemate.IJob, <-chan err
 					return
 				}
 
+				// Wrap the job to handle marking it as done after processing
+				wrappedJob := &jobWrapper{
+					IJob:     job,
+					provider: p,
+				}
+
 				select {
-				case outc <- job:
+				case outc <- wrappedJob:
 				case <-ctx.Done():
 					return
 				}
@@ -119,6 +155,11 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
             "usage_in_results": j.UsageInResultststs,
             "extract_email":    j.ExtractEmail,
         }	
+	case *gmaps.SocieteJob:
+		jsonJob.JobType = "societe"
+		jsonJob.Metadata = map[string]interface{}{
+			"extract_email": j.ExtractEmail,
+		}
     default:
         return errors.New("invalid job type")
     }
@@ -280,6 +321,18 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             },
             UsageInResultststs: jsonJob.Metadata["usage_in_results"].(bool),
             ExtractEmail:       jsonJob.Metadata["extract_email"].(bool),
+        }
+        return job, nil
+	case "societe":
+        job := &gmaps.SocieteJob{
+            Job: scrapemate.Job{
+                ID:         jsonJob.ID,
+                URL:        jsonJob.URL,
+                URLParams:  jsonJob.URLParams,
+                MaxRetries: jsonJob.MaxRetries,
+                Priority:   jsonJob.Priority,
+            },
+            ExtractEmail: jsonJob.Metadata["extract_email"].(bool),
         }
         return job, nil
     default:
