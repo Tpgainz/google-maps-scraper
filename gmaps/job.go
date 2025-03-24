@@ -22,6 +22,7 @@ type GmapJob struct {
 	MaxDepth     int
 	LangCode     string
 	ExtractEmail bool
+	UserID       string
 	Deduper     deduper.Deduper
 	ExitMonitor exiter.Exiter
 }

@@ -29,7 +29,7 @@ type JSONJob struct {
     URL        string                 `json:"url"`
     URLParams  map[string]string      `json:"url_params"`
     MaxRetries int                    `json:"max_retries"`
-    JobType    string                 `json:"job_type"`    // "search" ou "place"
+    JobType    string                 `json:"job_type"`   
     Metadata   map[string]interface{} `json:"metadata"`    // données spécifiques au type
 }
 
@@ -148,6 +148,7 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
             "max_depth":     j.MaxDepth,
             "lang_code":     j.LangCode,
             "extract_email": j.ExtractEmail,
+			"user_id":       j.UserID,
         }
     case *gmaps.PlaceJob:
         jsonJob.JobType = "place"
@@ -159,6 +160,7 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
 		jsonJob.JobType = "societe"
 		jsonJob.Metadata = map[string]interface{}{
 			"extract_email": j.ExtractEmail,
+			"user_id":       j.UserID,
 		}
     default:
         return errors.New("invalid job type")

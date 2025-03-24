@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -17,7 +18,7 @@ type SocieteJobOptions func(*SocieteJob)
 
 type SocieteJob struct {
 	scrapemate.Job
-
+	UserID       string
 	ExtractEmail bool
 	ExitMonitor  exiter.Exiter
 }
@@ -68,8 +69,10 @@ func (j *SocieteJob) Process(_ context.Context, resp *scrapemate.Response) (any,
 
 	// Créer une entrée à partir des données JSON
 	entry := &Entry{
-		Type: "societe",
-		URL:  j.GetURL(),
+		ID:              j.ID,
+		PopularTimes:    make(map[string]map[int]int),
+		ReviewsPerRating: make(map[int]int),
+		OpenHours:       make(map[string][]string),
 	}
 
 	// Analyser les données JSON pour extraire les informations de la société
@@ -82,7 +85,7 @@ func (j *SocieteJob) Process(_ context.Context, resp *scrapemate.Response) (any,
 	// Ceci dépendra de la structure exacte des données JSON
 	// Exemple:
 	if name, ok := extractStringValue(societeData, "name"); ok {
-		entry.Name = name
+		entry.Title = name
 	}
 	
 	if address, ok := extractStringValue(societeData, "address"); ok {
@@ -94,11 +97,79 @@ func (j *SocieteJob) Process(_ context.Context, resp *scrapemate.Response) (any,
 	}
 	
 	if website, ok := extractStringValue(societeData, "website"); ok {
-		entry.Website = website
+		entry.WebSite = website
 	}
 	
 	if description, ok := extractStringValue(societeData, "description"); ok {
 		entry.Description = description
+	}
+	
+	// Handle categories
+	if categoriesVal, ok := societeData["categories"]; ok {
+		if categoriesArr, ok := categoriesVal.([]interface{}); ok {
+			entry.Categories = make([]string, 0, len(categoriesArr))
+			for _, cat := range categoriesArr {
+				if catStr, ok := cat.(string); ok {
+					entry.Categories = append(entry.Categories, catStr)
+				}
+			}
+			
+			if len(entry.Categories) > 0 {
+				entry.Category = entry.Categories[0]
+			}
+		}
+	}
+	
+	// Extract opening hours if available
+	if hoursVal, ok := societeData["openingHours"]; ok {
+		if hoursMap, ok := hoursVal.(map[string]interface{}); ok {
+			for day, hours := range hoursMap {
+				if hoursStr, ok := hours.(string); ok {
+					entry.OpenHours[day] = []string{hoursStr}
+				}
+			}
+		}
+	}
+	
+	// Extract social links and other data
+	if socialLinks, ok := societeData["socialLinks"].(map[string]interface{}); ok {
+		// Store these links somewhere appropriate in the Entry structure
+		// For example, we could add them to a Description field
+		socialInfo := "\nSocial Links:\n"
+		for platform, link := range socialLinks {
+			if linkStr, ok := link.(string); ok && linkStr != "" {
+				socialInfo += platform + ": " + linkStr + "\n"
+			}
+		}
+		if len(socialInfo) > 20 { // Only append if we found some links
+			entry.Description += socialInfo
+		}
+	}
+	
+	// Try to extract latitude and longitude
+	if lat, ok := extractFloatValue(societeData, "latitude"); ok {
+		entry.Latitude = lat
+	}
+
+	if lng, ok := extractFloatValue(societeData, "longitude"); ok {
+		entry.Longtitude = lng // Note: Field is spelled "Longtitude" in the struct
+	}
+
+	// Try to extract review info
+	if rating, ok := extractFloatValue(societeData, "rating"); ok {
+		entry.ReviewRating = rating
+	}
+
+	if reviewCount, ok := extractIntValue(societeData, "reviewCount"); ok {
+		entry.ReviewCount = reviewCount
+	}
+
+	// Extract SIRET or other business identifiers if available
+	if siret, ok := extractStringValue(societeData, "siret"); ok {
+		if entry.Description != "" {
+			entry.Description += "\n"
+		}
+		entry.Description += "SIRET: " + siret
 	}
 	
 	// Extraire d'autres informations comme SIRET, catégories, etc.
@@ -114,7 +185,7 @@ func (j *SocieteJob) Process(_ context.Context, resp *scrapemate.Response) (any,
 
 		return nil, []scrapemate.IJob{emailJob}, nil
 	} else if j.ExitMonitor != nil {
-		j.ExitMonitor.IncrSocietesCompleted(1) // Vous devrez ajouter cette méthode à l'interface Exiter
+		j.ExitMonitor.IncrPlacesCompleted(1)
 	}
 
 	return entry, nil, nil
@@ -204,6 +275,66 @@ func extractStringValue(data map[string]interface{}, path string) (string, bool)
 	}
 	
 	return "", false
+}
+
+// Fonction utilitaire pour extraire une valeur float d'une map imbriquée
+func extractFloatValue(data map[string]interface{}, path string) (float64, bool) {
+	parts := strings.Split(path, ".")
+	current := data
+	
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			switch val := current[part].(type) {
+			case float64:
+				return val, true
+			case int:
+				return float64(val), true
+			case string:
+				if f, err := strconv.ParseFloat(val, 64); err == nil {
+					return f, true
+				}
+			}
+			return 0, false
+		}
+		
+		if next, ok := current[part].(map[string]interface{}); ok {
+			current = next
+		} else {
+			return 0, false
+		}
+	}
+	
+	return 0, false
+}
+
+// Fonction utilitaire pour extraire une valeur int d'une map imbriquée
+func extractIntValue(data map[string]interface{}, path string) (int, bool) {
+	parts := strings.Split(path, ".")
+	current := data
+	
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			switch val := current[part].(type) {
+			case int:
+				return val, true
+			case float64:
+				return int(val), true
+			case string:
+				if i, err := strconv.Atoi(val); err == nil {
+					return i, true
+				}
+			}
+			return 0, false
+		}
+		
+		if next, ok := current[part].(map[string]interface{}); ok {
+			current = next
+		} else {
+			return 0, false
+		}
+	}
+	
+	return 0, false
 }
 
 // Script JavaScript pour extraire les données de la société

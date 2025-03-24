@@ -14,6 +14,11 @@ import (
 	"github.com/tpgainz/google-maps-scraper/gmaps"
 )
 
+type entryWithType struct {
+	entry      *gmaps.Entry
+	payloadType string
+}
+
 func NewResultWriter(db *sql.DB) scrapemate.ResultWriter {
 	return &resultWriter{
 		db: db,
@@ -26,11 +31,6 @@ type resultWriter struct {
 
 func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) error {
 	const maxBatchSize = 50
-
-	type entryWithType struct {
-		entry      *gmaps.Entry
-		payloadType string
-	}
 
 	buff := make([]entryWithType, 0, 50)
 	lastSave := time.Now().UTC()
