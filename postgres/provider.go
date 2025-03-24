@@ -278,8 +278,6 @@ func (p *provider) fetchJobs(ctx context.Context) {
 }
 
 func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
-
-	
     // If the payload is a string, we need to unmarshal it first
     var rawJSON string
     err := json.Unmarshal(payload, &rawJSON)
@@ -300,6 +298,21 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             return nil, fmt.Errorf("failed to get max_depth: %w", err)
         }
         
+        langCode, ok := jsonJob.Metadata["lang_code"].(string)
+        if !ok {
+            return nil, fmt.Errorf("lang_code is missing or not a string")
+        }
+        
+        extractEmail, ok := jsonJob.Metadata["extract_email"].(bool)
+        if !ok {
+            return nil, fmt.Errorf("extract_email is missing or not a boolean")
+        }
+        
+        userID, ok := jsonJob.Metadata["user_id"].(string)
+        if !ok {
+            return nil, fmt.Errorf("user_id is missing or not a string")
+        }
+        
         job := &gmaps.GmapJob{
             Job: scrapemate.Job{
                 ID:         jsonJob.ID,
@@ -309,14 +322,28 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
                 Priority:   jsonJob.Priority,
             },
             MaxDepth:     maxDepth,
-            LangCode:     jsonJob.Metadata["lang_code"].(string),
-            ExtractEmail: jsonJob.Metadata["extract_email"].(bool),
-			UserID:       jsonJob.Metadata["user_id"].(string),
+            LangCode:     langCode,
+            ExtractEmail: extractEmail,
+            UserID:       userID,
         }
-        
         
         return job, nil
     case "place":
+        usageInResults, ok := jsonJob.Metadata["usage_in_results"].(bool)
+        if !ok {
+            return nil, fmt.Errorf("usage_in_results is missing or not a boolean")
+        }
+        
+        extractEmail, ok := jsonJob.Metadata["extract_email"].(bool)
+        if !ok {
+            return nil, fmt.Errorf("extract_email is missing or not a boolean")
+        }
+        
+        userID, ok := jsonJob.Metadata["user_id"].(string)
+        if !ok {
+            return nil, fmt.Errorf("user_id is missing or not a string")
+        }
+        
         job := &gmaps.PlaceJob{
             Job: scrapemate.Job{
                 ID:         jsonJob.ID,
@@ -325,14 +352,23 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
                 MaxRetries: jsonJob.MaxRetries,
                 Priority:   jsonJob.Priority,
             },
-            UsageInResultststs: jsonJob.Metadata["usage_in_results"].(bool),
-            ExtractEmail:       jsonJob.Metadata["extract_email"].(bool),
-			UserID:             jsonJob.Metadata["user_id"].(string),
+            UsageInResultststs: usageInResults,
+            ExtractEmail:       extractEmail,
+            UserID:             userID,
         }
         
-        
         return job, nil
-	case "societe":
+    case "societe":
+        extractEmail, ok := jsonJob.Metadata["extract_email"].(bool)
+        if !ok {
+            return nil, fmt.Errorf("extract_email is missing or not a boolean")
+        }
+        
+        userID, ok := jsonJob.Metadata["user_id"].(string)
+        if !ok {
+            return nil, fmt.Errorf("user_id is missing or not a string")
+        }
+        
         job := &gmaps.SocieteJob{
             Job: scrapemate.Job{
                 ID:         jsonJob.ID,
@@ -341,8 +377,8 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
                 MaxRetries: jsonJob.MaxRetries,
                 Priority:   jsonJob.Priority,
             },
-            ExtractEmail: jsonJob.Metadata["extract_email"].(bool),
-			UserID:       jsonJob.Metadata["user_id"].(string),
+            ExtractEmail: extractEmail,
+            UserID:       userID,
         }
         return job, nil
     default:
