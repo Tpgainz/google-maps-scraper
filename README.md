@@ -1,7 +1,7 @@
 # Google maps scraper
 
-![build](https://github.com/tpgainz/google-maps-scraper/actions/workflows/build.yml/badge.svg)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tpgainz/google-maps-scraper)](https://goreportcard.com/report/github.com/tpgainz/google-maps-scraper)
+![build](https://github.com/gosom/google-maps-scraper/actions/workflows/build.yml/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gosom/google-maps-scraper)](https://goreportcard.com/report/github.com/gosom/google-maps-scraper)
 
 > A command line and web UI google maps scraper
 
@@ -59,7 +59,7 @@ customize it to your needs
 mkdir -p gmapsdata && docker run -v $PWD/gmapsdata:/gmapsdata -p 8080:8080 gosom/google-maps-scraper -data-folder /gmapsdata
 ```
 
-Or dowload the [binary](https://github.com/tpgainz/google-maps-scraper/releases) for your platform and run it.
+Or dowload the [binary](https://github.com/gosom/google-maps-scraper/releases) for your platform and run it.
 
 Note: Even if you add one keyword the results will come in at least 3 minutes. This is a minimum configured runtime
 
@@ -169,7 +169,7 @@ file `results.csv` will contain the parsed results.
 (tested only on Ubuntu 22.04)
 
 ```
-git clone https://github.com/tpgainz/google-maps-scraper.git
+git clone https://github.com/gosom/google-maps-scraper.git
 cd google-maps-scraper
 go mod download
 go build
@@ -259,7 +259,7 @@ See an example:
 
 1. Write your plugin (use the examples/plugins/example_writer.go as a reference)
 2. Build your plugin `go build -buildmode=plugin -tags=plugin -o ~/myplugins/example_writer.so plugins/example_writer.go`
-3. Download the lastes [release](https://github.com/tpgainz/google-maps-scraper/releases/) or build the program
+3. Download the lastes [release](https://github.com/gosom/google-maps-scraper/releases/) or build the program
 4. Run the program like `./google-maps-scraper -writer ~/myplugins:DummyPrinter -input example-queries.txt`
 
 ### Plugins and Docker

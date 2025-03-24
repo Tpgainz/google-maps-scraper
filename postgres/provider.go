@@ -11,7 +11,7 @@ import (
 
 	"github.com/gosom/scrapemate"
 
-	"github.com/tpgainz/google-maps-scraper/gmaps"
+	"github.com/gosom/google-maps-scraper/gmaps"
 )
 
 const (
@@ -155,6 +155,7 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
         jsonJob.Metadata = map[string]interface{}{
             "usage_in_results": j.UsageInResultststs,
             "extract_email":    j.ExtractEmail,
+            "user_id":          j.UserID,
         }	
 	case *gmaps.SocieteJob:
 		jsonJob.JobType = "societe"
@@ -310,7 +311,10 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             MaxDepth:     maxDepth,
             LangCode:     jsonJob.Metadata["lang_code"].(string),
             ExtractEmail: jsonJob.Metadata["extract_email"].(bool),
+			UserID:       jsonJob.Metadata["user_id"].(string),
         }
+        
+        
         return job, nil
     case "place":
         job := &gmaps.PlaceJob{
@@ -323,7 +327,10 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             },
             UsageInResultststs: jsonJob.Metadata["usage_in_results"].(bool),
             ExtractEmail:       jsonJob.Metadata["extract_email"].(bool),
+			UserID:             jsonJob.Metadata["user_id"].(string),
         }
+        
+        
         return job, nil
 	case "societe":
         job := &gmaps.SocieteJob{
@@ -335,6 +342,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
                 Priority:   jsonJob.Priority,
             },
             ExtractEmail: jsonJob.Metadata["extract_email"].(bool),
+			UserID:       jsonJob.Metadata["user_id"].(string),
         }
         return job, nil
     default:

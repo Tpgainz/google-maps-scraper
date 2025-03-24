@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/gosom/google-maps-scraper/exiter"
 	"github.com/gosom/scrapemate"
 	"github.com/mcnijman/go-emailaddress"
-	"github.com/tpgainz/google-maps-scraper/exiter"
 )
 
 type EmailExtractJobOptions func(*EmailExtractJob)

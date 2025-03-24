@@ -7,22 +7,22 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/gosom/google-maps-scraper/exiter"
 	"github.com/gosom/scrapemate"
 	"github.com/playwright-community/playwright-go"
-	"github.com/tpgainz/google-maps-scraper/exiter"
 )
 
 type PlaceJobOptions func(*PlaceJob)
 
 type PlaceJob struct {
 	scrapemate.Job
-
+	UserID             string
 	UsageInResultststs bool
 	ExtractEmail       bool
 	ExitMonitor        exiter.Exiter
 }
 
-func NewPlaceJob(parentID, langCode, u string, extractEmail bool, opts ...PlaceJobOptions) *PlaceJob {
+func NewPlaceJob(parentID, langCode, u string, userID string, extractEmail bool, opts ...PlaceJobOptions) *PlaceJob {
 	const (
 		defaultPrio       = scrapemate.PriorityMedium
 		defaultMaxRetries = 3
@@ -42,6 +42,7 @@ func NewPlaceJob(parentID, langCode, u string, extractEmail bool, opts ...PlaceJ
 
 	job.UsageInResultststs = true
 	job.ExtractEmail = extractEmail
+	job.UserID = userID
 
 	for _, opt := range opts {
 		opt(&job)

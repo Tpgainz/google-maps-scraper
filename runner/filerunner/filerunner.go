@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gosom/google-maps-scraper/deduper"
+	"github.com/gosom/google-maps-scraper/exiter"
+	"github.com/gosom/google-maps-scraper/runner"
+	"github.com/gosom/google-maps-scraper/tlmt"
 	"github.com/gosom/scrapemate"
 	"github.com/gosom/scrapemate/adapters/writers/csvwriter"
 	"github.com/gosom/scrapemate/adapters/writers/jsonwriter"
 	"github.com/gosom/scrapemate/scrapemateapp"
-	"github.com/tpgainz/google-maps-scraper/deduper"
-	"github.com/tpgainz/google-maps-scraper/exiter"
-	"github.com/tpgainz/google-maps-scraper/runner"
-	"github.com/tpgainz/google-maps-scraper/tlmt"
 )
 
 type fileRunner struct {

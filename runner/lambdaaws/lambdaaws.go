@@ -15,11 +15,11 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambda"
 
+	"github.com/gosom/google-maps-scraper/exiter"
+	"github.com/gosom/google-maps-scraper/runner"
 	"github.com/gosom/scrapemate"
 	"github.com/gosom/scrapemate/adapters/writers/csvwriter"
 	"github.com/gosom/scrapemate/scrapemateapp"
-	"github.com/tpgainz/google-maps-scraper/exiter"
-	"github.com/tpgainz/google-maps-scraper/runner"
 )
 
 var _ runner.Runner = (*lambdaAwsRunner)(nil)

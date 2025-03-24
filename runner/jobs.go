@@ -9,10 +9,10 @@ import (
 	"plugin"
 	"strings"
 
+	"github.com/gosom/google-maps-scraper/deduper"
+	"github.com/gosom/google-maps-scraper/exiter"
+	"github.com/gosom/google-maps-scraper/gmaps"
 	"github.com/gosom/scrapemate"
-	"github.com/tpgainz/google-maps-scraper/deduper"
-	"github.com/tpgainz/google-maps-scraper/exiter"
-	"github.com/tpgainz/google-maps-scraper/gmaps"
 )
 
 func CreateSeedJobs(
@@ -49,8 +49,12 @@ func CreateSeedJobs(
 		if exitMonitor != nil {
 			opts = append(opts, gmaps.WithExitMonitor(exitMonitor))
 		}
+		var userID string
+		if id != "" {
+			userID = id
+		}
 
-		job := gmaps.NewGmapJob(id, langCode, query, maxDepth, email, geoCoordinates, zoom, opts...)
+		job := gmaps.NewGmapJob(id, langCode, query, userID, maxDepth, email, geoCoordinates, zoom, opts...)
 
 		jobs = append(jobs, job)
 	}
