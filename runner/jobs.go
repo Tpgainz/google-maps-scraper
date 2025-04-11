@@ -49,12 +49,12 @@ func CreateSeedJobs(
 		if exitMonitor != nil {
 			opts = append(opts, gmaps.WithExitMonitor(exitMonitor))
 		}
-		var userID string
+		var ownerID string
 		if id != "" {
-			userID = id
+			ownerID = id
 		}
 
-		job := gmaps.NewGmapJob(id, langCode, query, userID, maxDepth, email, geoCoordinates, zoom, opts...)
+		job := gmaps.NewGmapJob(id, langCode, query, ownerID, maxDepth, email, geoCoordinates, zoom, opts...)
 
 		jobs = append(jobs, job)
 	}

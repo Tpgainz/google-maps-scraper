@@ -148,20 +148,20 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
             "max_depth":     j.MaxDepth,
             "lang_code":     j.LangCode,
             "extract_email": j.ExtractEmail,
-			"user_id":       j.UserID,
+			"owner_id":       j.OwnerID,
         }
     case *gmaps.PlaceJob:
         jsonJob.JobType = "place"
         jsonJob.Metadata = map[string]interface{}{
             "usage_in_results": j.UsageInResultststs,
             "extract_email":    j.ExtractEmail,
-            "user_id":          j.UserID,
+            "owner_id":          j.OwnerID,
         }	
 	case *gmaps.SocieteJob:
 		jsonJob.JobType = "societe"
 		jsonJob.Metadata = map[string]interface{}{
 			"extract_email": j.ExtractEmail,
-			"user_id":       j.UserID,
+			"owner_id":       j.OwnerID,
 		}
     default:
         return errors.New("invalid job type")
@@ -308,9 +308,9 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             return nil, fmt.Errorf("extract_email is missing or not a boolean")
         }
         
-        userID, ok := jsonJob.Metadata["user_id"].(string)
+        ownerID, ok := jsonJob.Metadata["owner_id"].(string)
         if !ok {
-            return nil, fmt.Errorf("user_id is missing or not a string")
+            return nil, fmt.Errorf("owner_id is missing or not a string")
         }
         
         job := &gmaps.GmapJob{
@@ -324,7 +324,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             MaxDepth:     maxDepth,
             LangCode:     langCode,
             ExtractEmail: extractEmail,
-            UserID:       userID,
+            OwnerID:       ownerID,
         }
         
         return job, nil
@@ -339,9 +339,9 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             return nil, fmt.Errorf("extract_email is missing or not a boolean")
         }
         
-        userID, ok := jsonJob.Metadata["user_id"].(string)
+        ownerID, ok := jsonJob.Metadata["owner_id"].(string)
         if !ok {
-            return nil, fmt.Errorf("user_id is missing or not a string")
+            return nil, fmt.Errorf("owner_id is missing or not a string")
         }
         
         job := &gmaps.PlaceJob{
@@ -354,7 +354,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             },
             UsageInResultststs: usageInResults,
             ExtractEmail:       extractEmail,
-            UserID:             userID,
+            OwnerID:             ownerID,
         }
         
         return job, nil
@@ -364,9 +364,9 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             return nil, fmt.Errorf("extract_email is missing or not a boolean")
         }
         
-        userID, ok := jsonJob.Metadata["user_id"].(string)
+        ownerID, ok := jsonJob.Metadata["owner_id"].(string)
         if !ok {
-            return nil, fmt.Errorf("user_id is missing or not a string")
+            return nil, fmt.Errorf("owner_id is missing or not a string")
         }
         
         job := &gmaps.SocieteJob{
@@ -378,7 +378,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
                 Priority:   jsonJob.Priority,
             },
             ExtractEmail: extractEmail,
-            UserID:       userID,
+            OwnerID:       ownerID,
         }
         return job, nil
     default:

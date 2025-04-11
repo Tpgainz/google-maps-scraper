@@ -18,7 +18,7 @@ type SocieteJobOptions func(*SocieteJob)
 
 type SocieteJob struct {
 	scrapemate.Job
-	UserID       string
+	OwnerID       string
 	ExtractEmail bool
 	ExitMonitor  exiter.Exiter
 }

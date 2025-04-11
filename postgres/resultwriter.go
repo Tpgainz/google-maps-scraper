@@ -17,7 +17,7 @@ import (
 type entryWithType struct {
 	entry      *gmaps.Entry
 	payloadType string
-	userID      string
+	ownerID      string
 }
 
 func NewResultWriter(db *sql.DB) scrapemate.ResultWriter {
@@ -72,16 +72,16 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				}
 			}
 
-			var userID string
+			var ownerID string
 			if job, ok := result.Job.(*gmaps.GmapJob); ok {
-				userID = job.UserID
+				ownerID = job.OwnerID
 			} else if job, ok := result.Job.(*gmaps.PlaceJob); ok {
-				userID = job.UserID
+				ownerID = job.OwnerID
 			} else if job, ok := result.Job.(*gmaps.SocieteJob); ok {
-				userID = job.UserID
+				ownerID = job.OwnerID
 			}
 
-			buff = append(buff, entryWithType{entry: entry, payloadType: payloadType, userID: userID})
+			buff = append(buff, entryWithType{entry: entry, payloadType: payloadType, ownerID: ownerID})
 
 			if len(buff) >= maxBatchSize {
 				err := r.batchSave(ctx, buff)
@@ -126,7 +126,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []entryWithType) e
 		len(entries),
 	)
 	q := `INSERT INTO results
-		(data, payload_type, user_id)
+		(data, payload_type, owner_id)
 		VALUES
 		`
 	elements := make([]string, 0, len(entries))
@@ -139,7 +139,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []entryWithType) e
 		}
 
 		elements = append(elements, fmt.Sprintf("($%d, $%d, $%d)", i*3+1, i*3+2, i*3+3))
-		args = append(args, data, item.payloadType, item.userID)
+		args = append(args, data, item.payloadType, item.ownerID)
 	}
 
 	q += strings.Join(elements, ", ")
