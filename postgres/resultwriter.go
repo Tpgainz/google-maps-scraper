@@ -17,7 +17,7 @@ import (
 type entryWithType struct {
 	entry      *gmaps.Entry
 	payloadType string
-	ownerID      string
+	userID      string
 }
 
 func NewResultWriter(db *sql.DB) scrapemate.ResultWriter {
@@ -32,6 +32,8 @@ type resultWriter struct {
 
 func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) error {
 	const maxBatchSize = 50
+
+	log := scrapemate.GetLoggerFromContext(ctx)
 
 	buff := make([]entryWithType, 0, 50)
 	lastSave := time.Now().UTC()
@@ -72,16 +74,29 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				}
 			}
 
-			var ownerID string
-			if job, ok := result.Job.(*gmaps.GmapJob); ok {
-				ownerID = job.OwnerID
-			} else if job, ok := result.Job.(*gmaps.PlaceJob); ok {
-				ownerID = job.OwnerID
-			} else if job, ok := result.Job.(*gmaps.SocieteJob); ok {
-				ownerID = job.OwnerID
+			var userID string
+			var actualJob scrapemate.IJob = result.Job // Start with the job as is
+
+			// Check if the job is wrapped
+			if wrapper, ok := result.Job.(*jobWrapper); ok {
+				actualJob = wrapper.IJob // Use the embedded job
 			}
 
-			buff = append(buff, entryWithType{entry: entry, payloadType: payloadType, ownerID: ownerID})
+			// Now perform the type assertion on the actual job
+			if job, ok := actualJob.(*gmaps.GmapJob); ok {
+				userID = job.OwnerID
+				log.Info(fmt.Sprintf("OwnerID for GmapJob with job ID %s", job.ID))
+			} else if job, ok := actualJob.(*gmaps.PlaceJob); ok {
+				userID = job.OwnerID
+				log.Info(fmt.Sprintf("OwnerID for PlaceJob with job ID %s", job.ID))
+			} else if job, ok := actualJob.(*gmaps.SocieteJob); ok {
+				userID = job.OwnerID
+				log.Info(fmt.Sprintf("OwnerID for SocieteJob with job ID %s", job.ID))
+			} else {
+				log.Info(fmt.Sprintf("Unknown actual job type %T, cannot extract OwnerID", actualJob))
+			}
+
+			buff = append(buff, entryWithType{entry: entry, payloadType: payloadType, userID: userID})
 
 			if len(buff) >= maxBatchSize {
 				err := r.batchSave(ctx, buff)
@@ -121,12 +136,10 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []entryWithType) e
 
 	log := scrapemate.GetLoggerFromContext(ctx)
 
-	log.Info(
-		"Saving %d entries",
-		len(entries),
-	)
+	log.Info(fmt.Sprintf("Saving %d entries", len(entries)))
+
 	q := `INSERT INTO results
-		(data, payload_type, owner_id)
+		(data, payload_type, user_id)
 		VALUES
 		`
 	elements := make([]string, 0, len(entries))
@@ -139,11 +152,13 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []entryWithType) e
 		}
 
 		elements = append(elements, fmt.Sprintf("($%d, $%d, $%d)", i*3+1, i*3+2, i*3+3))
-		args = append(args, data, item.payloadType, item.ownerID)
+		args = append(args, data, item.payloadType, item.userID)
 	}
 
 	q += strings.Join(elements, ", ")
 	q += " ON CONFLICT DO NOTHING"
+
+	log.Info(fmt.Sprintf("Saving %d entries with query: %s", len(entries), q))
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -161,10 +176,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []entryWithType) e
 
 	err = tx.Commit()
 
-	log.Info(
-		"Saved %d entries",
-		len(entries),
-	)
+	log.Info(fmt.Sprintf("Saved %d entries", len(entries)))
 		
 
 	return err
