@@ -30,6 +30,24 @@ type resultWriter struct {
 	db *sql.DB
 }
 
+// checkDuplicateURL vérifie si une URL existe déjà pour un utilisateur donné
+func (r *resultWriter) checkDuplicateURL(ctx context.Context, url, userID string) (bool, error) {
+	if url == "" || userID == "" {
+		return false, nil
+	}
+
+	const q = `SELECT COUNT(*) FROM results 
+		WHERE data->>'link' = $1 AND user_id = $2`
+	
+	var count int
+	err := r.db.QueryRowContext(ctx, q, url, userID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check duplicate URL: %w", err)
+	}
+
+	return count > 0, nil
+}
+
 func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) error {
 	const maxBatchSize = 50
 
@@ -37,14 +55,13 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 
 	buff := make([]entryWithType, 0, 50)
 	lastSave := time.Now().UTC()
-	ticker := time.NewTicker(time.Second * 10) // Add a ticker to periodically save entries
+	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case result, ok := <-in:
 			if !ok {
-				// Channel closed, save any remaining entries
 				if len(buff) > 0 {
 					if err := r.batchSave(ctx, buff); err != nil {
 						return err
@@ -58,12 +75,9 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				return errors.New("invalid data type")
 			}
 
-			// Déterminer le payload_type avec une valeur par défaut
-			payloadType := "place" // Valeur par défaut
+			payloadType := "place"
 			
-			// Si le job est disponible dans le résultat, on peut extraire son type
 			if result.Job != nil {
-				// Essayer de déterminer le type à partir du job
 				switch result.Job.(type) {
 				case *gmaps.GmapJob:
 					payloadType = "search"
@@ -75,25 +89,30 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			}
 
 			var userID string
-			var actualJob scrapemate.IJob = result.Job // Start with the job as is
+			var actualJob scrapemate.IJob = result.Job
 
-			// Check if the job is wrapped
 			if wrapper, ok := result.Job.(*jobWrapper); ok {
-				actualJob = wrapper.IJob // Use the embedded job
+				actualJob = wrapper.IJob
 			}
 
-			// Now perform the type assertion on the actual job
 			if job, ok := actualJob.(*gmaps.GmapJob); ok {
 				userID = job.OwnerID
-				log.Info(fmt.Sprintf("OwnerID for GmapJob with job ID %s", job.ID))
 			} else if job, ok := actualJob.(*gmaps.PlaceJob); ok {
 				userID = job.OwnerID
-				log.Info(fmt.Sprintf("OwnerID for PlaceJob with job ID %s", job.ID))
 			} else if job, ok := actualJob.(*gmaps.SocieteJob); ok {
 				userID = job.OwnerID
-				log.Info(fmt.Sprintf("OwnerID for SocieteJob with job ID %s", job.ID))
-			} else {
-				log.Info(fmt.Sprintf("Unknown actual job type %T, cannot extract OwnerID", actualJob))
+			}
+
+			// Vérifier si cette URL existe déjà pour cet utilisateur
+			isDuplicate, err := r.checkDuplicateURL(ctx, entry.Link, userID)
+			if err != nil {
+				log.Error(fmt.Sprintf("Error checking duplicate URL: %v", err))
+				continue
+			}
+
+			if isDuplicate {
+				log.Info(fmt.Sprintf("Skipping duplicate URL %s for user %s", entry.Link, userID))
+				continue
 			}
 
 			buff = append(buff, entryWithType{entry: entry, payloadType: payloadType, userID: userID})
@@ -108,7 +127,6 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				lastSave = time.Now().UTC()
 			}
 		case <-ticker.C:
-			// Save any pending entries every tick interval
 			if len(buff) > 0 && time.Since(lastSave) >= time.Second*5 {
 				if err := r.batchSave(ctx, buff); err != nil {
 					return err
@@ -117,12 +135,10 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				lastSave = time.Now().UTC()
 			}
 		case <-ctx.Done():
-			// Context was cancelled, save any remaining entries
 			if len(buff) > 0 {
-				// Use background context for final save attempt
 				saveCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 				defer cancel()
-				_ = r.batchSave(saveCtx, buff) // Best effort save
+				_ = r.batchSave(saveCtx, buff)
 			}
 			return ctx.Err()
 		}
@@ -156,7 +172,6 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []entryWithType) e
 	}
 
 	q += strings.Join(elements, ", ")
-	q += " ON CONFLICT DO NOTHING"
 
 	log.Info(fmt.Sprintf("Saving %d entries with query: %s", len(entries), q))
 
@@ -177,7 +192,6 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []entryWithType) e
 	err = tx.Commit()
 
 	log.Info(fmt.Sprintf("Saved %d entries", len(entries)))
-		
 
 	return err
 }

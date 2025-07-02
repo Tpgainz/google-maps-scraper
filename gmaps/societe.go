@@ -238,7 +238,16 @@ func (j *SocieteJob) BrowserActions(_ context.Context, page playwright.Page) scr
 
 	raw, ok := rawI.(string)
 	if !ok {
-		resp.Error = fmt.Errorf("could not convert to string")
+		if rawI == nil {
+			resp.Error = fmt.Errorf("JavaScript returned null - page structure may have changed or data not available")
+		} else {
+			resp.Error = fmt.Errorf("could not convert to string: got %T, expected string", rawI)
+		}
+		return resp
+	}
+
+	if raw == "" {
+		resp.Error = fmt.Errorf("JavaScript returned empty string - no data found on page")
 		return resp
 	}
 
@@ -341,39 +350,43 @@ func extractIntValue(data map[string]interface{}, path string) (int, bool) {
 // Vous devrez adapter ce script en fonction de la structure de la page
 const societeJS = `
 function extractSocieteData() {
-  // Exemple: extraire les données d'une variable globale
-  // return window.SOCIETE_DATA;
-  
-  // Ou construire un objet à partir des éléments de la page
-  const data = {
-    name: document.querySelector('.company-name')?.textContent?.trim(),
-    address: document.querySelector('.company-address')?.textContent?.trim(),
-    phone: document.querySelector('.company-phone')?.textContent?.trim(),
-    website: document.querySelector('.company-website')?.href,
-    description: document.querySelector('.company-description')?.textContent?.trim(),
-    siret: document.querySelector('.company-siret')?.textContent?.trim(),
+  try {
+    // Exemple: extraire les données d'une variable globale
+    // return window.SOCIETE_DATA;
     
-    // Extraire les catégories
-    categories: Array.from(document.querySelectorAll('.company-categories .category')).map(el => el.textContent.trim()),
+    // Ou construire un objet à partir des éléments de la page
+    const data = {
+      name: document.querySelector('.company-name')?.textContent?.trim() || '',
+      address: document.querySelector('.company-address')?.textContent?.trim() || '',
+      phone: document.querySelector('.company-phone')?.textContent?.trim() || '',
+      website: document.querySelector('.company-website')?.href || '',
+      description: document.querySelector('.company-description')?.textContent?.trim() || '',
+      siret: document.querySelector('.company-siret')?.textContent?.trim() || '',
+      
+      // Extraire les catégories
+      categories: Array.from(document.querySelectorAll('.company-categories .category')).map(el => el.textContent?.trim() || ''),
+      
+      // Extraire les heures d'ouverture
+      openingHours: Object.fromEntries(
+        Array.from(document.querySelectorAll('.company-hours .day-hours')).map(el => [
+          el.querySelector('.day')?.textContent?.trim() || '',
+          el.querySelector('.hours')?.textContent?.trim() || ''
+        ])
+      ),
+      
+      // Extraire les liens sociaux
+      socialLinks: {
+        facebook: document.querySelector('a[href*="facebook.com"]')?.href || '',
+        twitter: document.querySelector('a[href*="twitter.com"]')?.href || '',
+        linkedin: document.querySelector('a[href*="linkedin.com"]')?.href || '',
+        instagram: document.querySelector('a[href*="instagram.com"]')?.href || ''
+      }
+    };
     
-    // Extraire les heures d'ouverture
-    openingHours: Object.fromEntries(
-      Array.from(document.querySelectorAll('.company-hours .day-hours')).map(el => [
-        el.querySelector('.day')?.textContent?.trim(),
-        el.querySelector('.hours')?.textContent?.trim()
-      ])
-    ),
-    
-    // Extraire les liens sociaux
-    socialLinks: {
-      facebook: document.querySelector('a[href*="facebook.com"]')?.href,
-      twitter: document.querySelector('a[href*="twitter.com"]')?.href,
-      linkedin: document.querySelector('a[href*="linkedin.com"]')?.href,
-      instagram: document.querySelector('a[href*="instagram.com"]')?.href
-    }
-  };
-  
-  return JSON.stringify(data);
+    return JSON.stringify(data);
+  } catch (error) {
+    return JSON.stringify({ error: error.message });
+  }
 }
 
 extractSocieteData();
