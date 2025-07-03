@@ -15,7 +15,7 @@ import (
 )
 
 type entryWithType struct {
-	entry      *gmaps.Entry
+	entry      *gmaps.SimpleEntry
 	payloadType string
 	userID      string
 }
@@ -75,6 +75,8 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				return errors.New("invalid data type")
 			}
 
+			simpleEntry := entry.ToSimpleEntry()
+
 			payloadType := "place"
 			
 			if result.Job != nil {
@@ -104,18 +106,18 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			}
 
 			// Vérifier si cette URL existe déjà pour cet utilisateur
-			isDuplicate, err := r.checkDuplicateURL(ctx, entry.Link, userID)
+			isDuplicate, err := r.checkDuplicateURL(ctx, simpleEntry.Link, userID)
 			if err != nil {
 				log.Error(fmt.Sprintf("Error checking duplicate URL: %v", err))
 				continue
 			}
 
 			if isDuplicate {
-				log.Info(fmt.Sprintf("Skipping duplicate URL %s for user %s", entry.Link, userID))
+				log.Info(fmt.Sprintf("Skipping duplicate URL %s for user %s", simpleEntry.Link, userID))
 				continue
 			}
 
-			buff = append(buff, entryWithType{entry: entry, payloadType: payloadType, userID: userID})
+			buff = append(buff, entryWithType{entry: &simpleEntry, payloadType: payloadType, userID: userID})
 
 			if len(buff) >= maxBatchSize {
 				err := r.batchSave(ctx, buff)

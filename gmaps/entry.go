@@ -91,6 +91,17 @@ type Entry struct {
 	Emails           []string               `json:"emails"`
 }
 
+type SimpleEntry struct {
+	ID       string `json:"input_id"`
+	Link     string `json:"link"`
+	Cid      string `json:"cid"`
+	Title    string `json:"title"`
+	Category string `json:"category"`
+	Address  string `json:"address"`
+	WebSite  string `json:"web_site"`
+	Phone    string `json:"phone"`
+}
+
 func (e *Entry) IsWebsiteValidForEmail() bool {
 	if e.WebSite == "" {
 		return false
@@ -554,4 +565,17 @@ func decodeURL(url string) (string, error) {
 	}
 
 	return unquoted, nil
+}
+
+func (e *Entry) ToSimpleEntry() SimpleEntry {
+	return SimpleEntry{
+		ID:       e.ID,
+		Link:     e.Link,
+		Cid:      e.Cid,
+		Title:    e.Title,
+		Category: e.Category,
+		Address:  e.Address,
+		WebSite:  e.WebSite,
+		Phone:    e.Phone,
+	}
 }

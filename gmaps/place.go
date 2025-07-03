@@ -182,8 +182,21 @@ func (j *PlaceJob) UseInResults() bool {
 	return j.UsageInResultststs
 }
 
+
 const js = `
 function parse() {
- return window.APP_INITIALIZATION_STATE[3].Qf[6]  
+	const appState = window.APP_INITIALIZATION_STATE[3];
+	if (!appState) {
+		return null;
+	}
+
+	for (let i = 65; i <= 90; i++) {
+		const key = String.fromCharCode(i) + "f";
+		if (appState[key] && appState[key][6]) {
+		return appState[key][6];
+		}
+	}
+
+	return null;
 }
 `
