@@ -1,0 +1,16 @@
+services:
+  scraper:
+    build: .
+    command: -dsn "postgres://postgres:postgres@db:5432/postgres" -c 2 -depth 10
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+    networks:
+      - proxy
+      - backend
+
+networks:
+  proxy:
+    external: true
+  backend:
+    external: true

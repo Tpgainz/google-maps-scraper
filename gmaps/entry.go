@@ -679,3 +679,29 @@ func filterAndSortEntriesWithinRadius(entries []*Entry, lat, lon, radius float64
 
 	return slices.Collect(iter.Seq[*Entry](resultIterator))
 }
+
+type SimpleEntry struct {
+	ID       string `json:"input_id"`
+	Link     string `json:"link"`
+	Cid      string `json:"cid"`
+	Title    string `json:"title"`
+	Category string `json:"category"`
+	Address  string `json:"address"`
+	WebSite  string `json:"web_site"`
+	Phone    string `json:"phone"`
+	Emails   []string `json:"emails"`
+}
+
+func (e *Entry) ToSimpleEntry() SimpleEntry {
+	return SimpleEntry{
+		ID:       e.ID,
+		Link:     e.Link,
+		Cid:      e.Cid,
+		Title:    e.Title,
+		Category: e.Category,
+		Address:  e.Address,
+		WebSite:  e.WebSite,
+		Phone:    e.Phone,
+		Emails:   e.Emails,
+	}
+}
