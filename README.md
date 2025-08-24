@@ -69,6 +69,7 @@ A no-code Google Maps scraper that pulls business leads from Google Maps in one 
 
 - 📇 **Includes** emails, social profiles, phone numbers, addresses, reviews, images and more.
 - 📥 **Export** to CSV · Excel · JSON  
+- 🔌 **API** Support: Extract data via [API](https://gmapsextractor.com/google-maps-api?utm_source=github&utm_medium=banner&utm_campaign=gosom)
 - 🎁 **Free**: Get your first **1,000 leads** today  
 [Get Started for Free](https://gmapsextractor.com?utm_source=github&utm_medium=banner&utm_campaign=gosom)
 
@@ -358,6 +359,42 @@ The results are written when they arrive in the `results` file you specified
 
 **If you want emails use additionally the `-email` parameter**
 
+### Using a Proxy
+
+#### UI
+From the UI set the url, username and password
+
+#### Command line
+
+Use the `-proxies` option like:
+
+```
+./google-maps-scraper -input example-queries.txt -results random.txt -proxies '<proxy1>,<proxy2>' -depth 1 -c 2
+```
+
+where `<proxy1>,...<proxyN>` is a valid proxy url like:
+
+```
+'scheme://username:password@host:port
+```
+
+if your proxy does not require authentication:
+
+```
+scheme://host:port
+```
+
+Supported schemes:
+
+- socks5
+- socks5h
+- http
+- https
+
+I encourange you to buy a proxy service from one of our sponsors.
+They are reliable and help me to maintain the project.
+
+
 ### Command line options
 
 try `./google-maps-scraper -h` to see the command line options available:
@@ -623,7 +660,8 @@ Thank you for considering support for the project. Every bit of assistance helps
 A no-code Google Maps scraper that pulls business leads from Google Maps in one click.
 
 - 📇 **Includes** emails, social profiles, phone numbers, addresses, reviews, images and more.
-- 📥 **Export** to CSV · Excel · JSON  
+- 📥 **Export** to CSV · Excel · JSON
+- 🔌 **API** Support: Extract data via [API](https://gmapsextractor.com/google-maps-api?utm_source=github&utm_medium=banner&utm_campaign=gosom)
 - 🎁 **Free**: Get your first **1,000 leads** today  
 <a href="https://gmapsextractor.com?utm_source=github&utm_medium=banner&utm_campaign=gosom">Get Started for Free</a>
 </td>
@@ -665,3 +703,4 @@ Please use this scraper responsibly and in accordance with all applicable laws a
 
 banner is generated using OpenAI's DALL-E
 > **Note:** If you register via the links on my page, I may get a commission. This is another way to support my work
+
