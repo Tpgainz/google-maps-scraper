@@ -2,6 +2,7 @@ package gmaps
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -11,16 +12,22 @@ import (
 	"github.com/mcnijman/go-emailaddress"
 )
 
+var (
+	EmailRegex = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z\-]+\.[a-z\-]+$`)
+)
+
 type EmailExtractJobOptions func(*EmailExtractJob)
 
 type EmailExtractJob struct {
 	scrapemate.Job
 
+	OwnerID string
+	OrganizationID string
 	Entry       *Entry
 	ExitMonitor exiter.Exiter
 }
 
-func NewEmailJob(parentID string, entry *Entry, opts ...EmailExtractJobOptions) *EmailExtractJob {
+func NewEmailJob(parentID string, entry *Entry, ownerID, organizationID string, opts ...EmailExtractJobOptions) *EmailExtractJob {
 	const (
 		defaultPrio       = scrapemate.PriorityHigh
 		defaultMaxRetries = 0
@@ -38,7 +45,8 @@ func NewEmailJob(parentID string, entry *Entry, opts ...EmailExtractJobOptions) 
 	}
 
 	job.Entry = entry
-
+	job.OwnerID = ownerID
+	job.OrganizationID = organizationID
 	for _, opt := range opts {
 		opt(&job)
 	}
@@ -79,8 +87,18 @@ func (j *EmailExtractJob) Process(ctx context.Context, resp *scrapemate.Response
 	}
 
 	emails := docEmailExtractor(doc)
-	if len(emails) == 0 {
-		emails = regexEmailExtractor(resp.Body)
+	regexEmails := regexEmailExtractor(resp.Body)
+	if len(regexEmails) > 0 {
+		seen := map[string]bool{}
+		for _, e := range emails {
+			seen[e] = true
+		}
+		for _, e := range regexEmails {
+			if !seen[e] {
+				emails = append(emails, e)
+				seen[e] = true
+			}
+		}
 	}
 
 	j.Entry.Emails = emails
@@ -120,9 +138,23 @@ func regexEmailExtractor(body []byte) []string {
 
 	addresses := emailaddress.Find(body, false)
 	for i := range addresses {
-		if !seen[addresses[i].String()] {
-			emails = append(emails, addresses[i].String())
-			seen[addresses[i].String()] = true
+		v := addresses[i].String()
+		if email, err := getValidEmail(v); err == nil {
+			if !seen[email] {
+				emails = append(emails, email)
+				seen[email] = true
+			}
+		}
+	}
+
+	raw := string(body)
+	matches := EmailRegex.FindAllString(raw, -1)
+	for _, m := range matches {
+		if email, err := getValidEmail(m); err == nil {
+			if !seen[email] {
+				emails = append(emails, email)
+				seen[email] = true
+			}
 		}
 	}
 

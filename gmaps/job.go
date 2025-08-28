@@ -22,6 +22,7 @@ type GmapJob struct {
 	scrapemate.Job
 
 	OwnerID string
+	OrganizationID string
 	MaxDepth     int
 	LangCode     string
 	ExtractEmail bool
@@ -31,7 +32,7 @@ type GmapJob struct {
 }
 
 func NewGmapJob(
-	id, langCode, query, ownerID string,
+	id, langCode, query, ownerID, organizationID string,
 	maxDepth int,
 	extractEmail bool,
 	geoCoordinates string,
@@ -70,6 +71,7 @@ func NewGmapJob(
 		LangCode:     langCode,
 		ExtractEmail: extractEmail,
 		OwnerID:      ownerID,
+		OrganizationID: organizationID,
 	}
 
 	for _, opt := range opts {
@@ -122,7 +124,7 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 			jopts = append(jopts, WithPlaceJobExitMonitor(j.ExitMonitor))
 		}
 
-		placeJob := NewPlaceJob(j.ID, j.LangCode, resp.URL, j.OwnerID, j.ExtractEmail, j.ExtractExtraReviews, jopts...)
+		placeJob := NewPlaceJob(j.ID, j.LangCode, resp.URL, j.OwnerID, j.OrganizationID, j.ExtractEmail, j.ExtractExtraReviews, jopts...)
 
 		next = append(next, placeJob)
 	} else {
@@ -133,7 +135,7 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 					jopts = append(jopts, WithPlaceJobExitMonitor(j.ExitMonitor))
 				}
 
-				nextJob := NewPlaceJob(j.ID, j.LangCode, href, j.OwnerID, j.ExtractEmail, j.ExtractExtraReviews, jopts...)
+				nextJob := NewPlaceJob(j.ID, j.LangCode, href, j.OwnerID, j.OrganizationID, j.ExtractEmail, j.ExtractExtraReviews, jopts...)
 
 				if j.Deduper == nil || j.Deduper.AddIfNotExists(ctx, href) {
 					next = append(next, nextJob)

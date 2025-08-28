@@ -101,11 +101,12 @@ func CreateSeedJobs(
 			}
 
 			var ownerID string
+			var organizationID string
 		if id != "" {
 			ownerID = id
-		}
+			}
 
-			job = gmaps.NewGmapJob(id, langCode, query, ownerID, maxDepth, email, geoCoordinates, zoom, opts...)
+			job = gmaps.NewGmapJob(id, langCode, query, ownerID, organizationID, maxDepth, email, geoCoordinates, zoom, opts...)
 		} else {
 			jparams := gmaps.MapSearchParams{
 				Location: gmaps.MapLocation{

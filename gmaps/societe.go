@@ -19,11 +19,12 @@ type SocieteJobOptions func(*SocieteJob)
 type SocieteJob struct {
 	scrapemate.Job
 	OwnerID       string
+	OrganizationID string
 	ExtractEmail bool
 	ExitMonitor  exiter.Exiter
 }
 
-func NewSocieteJob(langCode, u string, extractEmail bool, opts ...SocieteJobOptions) *SocieteJob {
+func NewSocieteJob(langCode, u, ownerID, organizationID string, extractEmail bool, opts ...SocieteJobOptions) *SocieteJob {
 	const (
 		defaultPrio       = scrapemate.PriorityMedium
 		defaultMaxRetries = 3
@@ -41,7 +42,8 @@ func NewSocieteJob(langCode, u string, extractEmail bool, opts ...SocieteJobOpti
 	}
 
 	job.ExtractEmail = extractEmail
-
+	job.OwnerID = ownerID
+	job.OrganizationID = organizationID
 	for _, opt := range opts {
 		opt(&job)
 	}
@@ -181,7 +183,7 @@ func (j *SocieteJob) Process(_ context.Context, resp *scrapemate.Response) (any,
 			opts = append(opts, WithEmailJobExitMonitor(j.ExitMonitor))
 		}
 
-		emailJob := NewEmailJob(j.ID, entry, opts...)
+		emailJob := NewEmailJob(j.ID, entry, j.OwnerID, j.OrganizationID, opts...)
 
 		return nil, []scrapemate.IJob{emailJob}, nil
 	} else if j.ExitMonitor != nil {

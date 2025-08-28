@@ -19,13 +19,14 @@ type PlaceJobOptions func(*PlaceJob)
 type PlaceJob struct {
 	scrapemate.Job
     OwnerID             string
+	OrganizationID      string
 	UsageInResultststs  bool
 	ExtractEmail        bool
 	ExitMonitor         exiter.Exiter
 	ExtractExtraReviews bool
 }
 
-func NewPlaceJob(parentID, langCode, u, ownerID string, extractEmail, extraExtraReviews bool, opts ...PlaceJobOptions) *PlaceJob {
+func NewPlaceJob(parentID, langCode, u, ownerID, organizationID string, extractEmail, extraExtraReviews bool, opts ...PlaceJobOptions) *PlaceJob {
 	const (
 		defaultPrio       = scrapemate.PriorityMedium
 		defaultMaxRetries = 3
@@ -47,7 +48,7 @@ func NewPlaceJob(parentID, langCode, u, ownerID string, extractEmail, extraExtra
 	job.ExtractEmail = extractEmail
 	job.ExtractExtraReviews = extraExtraReviews
 	job.OwnerID = ownerID
-
+	job.OrganizationID = organizationID
 	for _, opt := range opts {
 		opt(&job)
 	}
@@ -95,7 +96,7 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 			opts = append(opts, WithEmailJobExitMonitor(j.ExitMonitor))
 		}
 
-		emailJob := NewEmailJob(j.ID, &entry, opts...)
+		emailJob := NewEmailJob(j.ID, &entry, j.OwnerID, j.OrganizationID, opts...)
 
 		j.UsageInResultststs = false
 
