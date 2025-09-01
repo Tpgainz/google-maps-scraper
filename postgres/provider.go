@@ -31,7 +31,8 @@ type JSONJob struct {
     URLParams  map[string]string      `json:"url_params"`
     MaxRetries int                    `json:"max_retries"`
     JobType    string                 `json:"job_type"`   
-    Metadata   map[string]interface{} `json:"metadata"`    // données spécifiques au type
+    Metadata   map[string]interface{} `json:"metadata"`
+    ParentID   *string               `json:"parent_id,omitempty"`
 }
 
 type provider struct {
@@ -62,7 +63,15 @@ func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (an
     data, nextJobs, err := w.IJob.Process(ctx, resp)
     
     if err == nil {
-        _ = w.provider.MarkDone(ctx, w.IJob)
+        if len(nextJobs) > 0 {
+            if err := w.provider.pushChildJobs(ctx, w.IJob, nextJobs); err != nil {
+                return data, nextJobs, err
+            }
+        }
+        
+        if err := w.provider.markJobDone(ctx, w.IJob, len(nextJobs)); err != nil {
+            return data, nextJobs, err
+        }
     } else {
         _ = w.provider.MarkFailed(ctx, w.IJob)
     }
@@ -70,10 +79,168 @@ func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (an
     return data, nextJobs, err
 }
 
-func (p *provider) MarkDone(ctx context.Context, job scrapemate.IJob) error {
-    q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
-    _, err := p.db.ExecContext(ctx, q, statusDone, job.GetID())
+func (p *provider) pushChildJobs(ctx context.Context, parentJob scrapemate.IJob, childJobs []scrapemate.IJob) error {
+    if len(childJobs) == 0 {
+        return nil
+    }
+    
+    tx, err := p.db.BeginTx(ctx, nil)
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+    
+    updateParentQuery := `UPDATE gmaps_jobs SET child_jobs_count = child_jobs_count + $1 WHERE id = $2`
+    _, err = tx.ExecContext(ctx, updateParentQuery, len(childJobs), parentJob.GetID())
+    if err != nil {
+        return err
+    }
+    
+    for _, childJob := range childJobs {
+        if err := p.pushJobWithParent(ctx, tx, childJob, parentJob.GetID()); err != nil {
+            return err
+        }
+    }
+    
+    return tx.Commit()
+}
+
+func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrapemate.IJob, parentID string) error {
+    q := `INSERT INTO gmaps_jobs
+        (id, parentId, priority, payload_type, payload, created_at, status)
+        VALUES
+        ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`
+
+    jsonJob := &JSONJob{
+        ID:         job.GetID(),
+        Priority:   job.GetPriority(),
+        URL:        job.GetURL(),
+        URLParams:  job.GetURLParams(),
+        MaxRetries: job.GetMaxRetries(),
+        ParentID:   &parentID,
+    }
+
+    switch j := job.(type) {
+    case *gmaps.GmapJob:
+        jsonJob.JobType = "search"
+        jsonJob.Metadata = map[string]interface{}{
+            "max_depth":     j.MaxDepth,
+            "lang_code":     j.LangCode,
+            "extract_email": j.ExtractEmail,
+            "owner_id":       j.OwnerID,
+            "organization_id": j.OrganizationID,
+        }
+    case *gmaps.PlaceJob:
+        jsonJob.JobType = "place"
+        jsonJob.Metadata = map[string]interface{}{
+            "usage_in_results": j.UsageInResultststs,
+            "extract_email":    j.ExtractEmail,
+            "owner_id":          j.OwnerID,
+            "organization_id": j.OrganizationID,
+        }
+    case *gmaps.EmailExtractJob:
+        jsonJob.JobType = "email"
+        jsonJob.Metadata = map[string]interface{}{
+            "entry":     j.Entry,
+            "parent_id": j.Job.ParentID,
+            "owner_id": j.OwnerID,
+            "organization_id": j.OrganizationID,
+        }
+    case *gmaps.SocieteJob:
+        jsonJob.JobType = "societe"
+        jsonJob.Metadata = map[string]interface{}{
+            "extract_email": j.ExtractEmail,
+            "owner_id":       j.OwnerID,
+            "organization_id": j.OrganizationID,
+        }
+    default:
+        return errors.New("invalid job type")
+    }
+
+    if jsonJob.ID == "" {
+        jsonJob.ID = uuid.New().String()
+    }
+
+    payload, err := json.Marshal(jsonJob)
+    if err != nil {
+        return fmt.Errorf("failed to marshal job: %w", err)
+    }
+
+    _, err = tx.ExecContext(ctx, q,
+        jsonJob.ID,
+        parentID,
+        jsonJob.Priority,
+        jsonJob.JobType,
+        payload,
+        time.Now().UTC(),
+        statusNew,
+    )
+
     return err
+}
+
+func (p *provider) markJobDone(ctx context.Context, job scrapemate.IJob, childJobsCreated int) error {
+    tx, err := p.db.BeginTx(ctx, nil)
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+    
+    if childJobsCreated == 0 {
+        q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
+        _, err = tx.ExecContext(ctx, q, statusDone, job.GetID())
+        if err != nil {
+            return err
+        }
+        
+        if err := p.checkAndMarkParentDone(ctx, tx, job.GetID()); err != nil {
+            return err
+        }
+    } else {
+        q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
+        _, err = tx.ExecContext(ctx, q, "processing", job.GetID())
+        if err != nil {
+            return err
+        }
+    }
+    
+    return tx.Commit()
+}
+
+func (p *provider) checkAndMarkParentDone(ctx context.Context, tx *sql.Tx, jobID string) error {
+    var parentID sql.NullString
+    err := tx.QueryRowContext(ctx, `SELECT parentId FROM gmaps_jobs WHERE id = $1`, jobID).Scan(&parentID)
+    if err != nil || !parentID.Valid {
+        return err
+    }
+    
+    _, err = tx.ExecContext(ctx, `UPDATE gmaps_jobs SET child_jobs_completed = child_jobs_completed + 1 WHERE id = $1`, parentID.String)
+    if err != nil {
+        return err
+    }
+    
+    var childCount, completedCount int
+    err = tx.QueryRowContext(ctx, 
+        `SELECT child_jobs_count, child_jobs_completed FROM gmaps_jobs WHERE id = $1`, 
+        parentID.String).Scan(&childCount, &completedCount)
+    if err != nil {
+        return err
+    }
+    
+    if completedCount >= childCount && childCount > 0 {
+        _, err = tx.ExecContext(ctx, `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`, statusDone, parentID.String)
+        if err != nil {
+            return err
+        }
+        
+        return p.checkAndMarkParentDone(ctx, tx, parentID.String)
+    }
+    
+    return nil
+}
+
+func (p *provider) MarkDone(ctx context.Context, job scrapemate.IJob) error {
+    return p.markJobDone(ctx, job, 0)
 }
 
 func (p *provider) MarkFailed(ctx context.Context, job scrapemate.IJob) error {
@@ -128,12 +295,12 @@ func (p *provider) Jobs(ctx context.Context) (<-chan scrapemate.IJob, <-chan err
 	return outc, errc
 }
 
-// Push pushes a job to the job provider
+// Modifier la méthode Push pour inclure parent_id
 func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
     q := `INSERT INTO gmaps_jobs
-        (id, priority, payload_type, payload, created_at, status)
+        (id, parentId, priority, payload_type, payload, created_at, status)
         VALUES
-        ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`
+        ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`
 
     jsonJob := &JSONJob{
         ID:         job.GetID(),
@@ -143,25 +310,36 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
         MaxRetries: job.GetMaxRetries(),
     }
 
+    // Récupérer le parentID du job et les métadonnées
+    var parentID *string
     switch j := job.(type) {
     case *gmaps.GmapJob:
+        if j.ParentID != "" {
+            parentID = &j.ParentID
+        }
         jsonJob.JobType = "search"
         jsonJob.Metadata = map[string]interface{}{
             "max_depth":     j.MaxDepth,
             "lang_code":     j.LangCode,
             "extract_email": j.ExtractEmail,
-			"owner_id":       j.OwnerID,
-			"organization_id": j.OrganizationID,
+            "owner_id":       j.OwnerID,
+            "organization_id": j.OrganizationID,
         }
     case *gmaps.PlaceJob:
+        if j.ParentID != "" {
+            parentID = &j.ParentID
+        }
         jsonJob.JobType = "place"
         jsonJob.Metadata = map[string]interface{}{
             "usage_in_results": j.UsageInResultststs,
             "extract_email":    j.ExtractEmail,
             "owner_id":          j.OwnerID,
-			"organization_id": j.OrganizationID,
-        }	
+            "organization_id": j.OrganizationID,
+        }
     case *gmaps.EmailExtractJob:
+        if j.ParentID != "" {
+            parentID = &j.ParentID
+        }
         jsonJob.JobType = "email"
         jsonJob.Metadata = map[string]interface{}{
             "entry":     j.Entry,
@@ -169,13 +347,16 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
             "owner_id": j.OwnerID,
             "organization_id": j.OrganizationID,
         }
-	case *gmaps.SocieteJob:
-		jsonJob.JobType = "societe"
-		jsonJob.Metadata = map[string]interface{}{
-			"extract_email": j.ExtractEmail,
-			"owner_id":       j.OwnerID,
-			"organization_id": j.OrganizationID,
-		}
+    case *gmaps.SocieteJob:
+        if j.ParentID != "" {
+            parentID = &j.ParentID
+        }
+        jsonJob.JobType = "societe"
+        jsonJob.Metadata = map[string]interface{}{
+            "extract_email": j.ExtractEmail,
+            "owner_id":       j.OwnerID,
+            "organization_id": j.OrganizationID,
+        }
     default:
         return errors.New("invalid job type")
     }
@@ -190,7 +371,13 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
     }
 
     _, err = p.db.ExecContext(ctx, q,
-        jsonJob.ID, job.GetPriority(), jsonJob.JobType, payload, time.Now().UTC(), statusNew,
+        jsonJob.ID,
+        parentID,
+        jsonJob.Priority,
+        jsonJob.JobType,
+        payload,
+        time.Now().UTC(),
+        statusNew,
     )
 
     return err
@@ -335,9 +522,15 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             return nil, fmt.Errorf("organization_id is not a string")
         }
         
+        var parentID string
+        if jsonJob.ParentID != nil {
+            parentID = *jsonJob.ParentID
+        }
+        
         job := &gmaps.GmapJob{
             Job: scrapemate.Job{
                 ID:         jsonJob.ID,
+                ParentID:   parentID,
                 URL:        jsonJob.URL,
                 URLParams:  jsonJob.URLParams,
                 MaxRetries: jsonJob.MaxRetries,
@@ -372,9 +565,15 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             return nil, fmt.Errorf("organization_id is not a string")
         }
 
+        var parentID string
+        if jsonJob.ParentID != nil {
+            parentID = *jsonJob.ParentID
+        }
+
         job := &gmaps.PlaceJob{
             Job: scrapemate.Job{
                 ID:         jsonJob.ID,
+                ParentID:   parentID,
                 URL:        jsonJob.URL,
                 URLParams:  jsonJob.URLParams,
                 MaxRetries: jsonJob.MaxRetries,
@@ -403,9 +602,15 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             return nil, fmt.Errorf("organization_id is not a string")
         }
         
+        var parentID string
+        if jsonJob.ParentID != nil {
+            parentID = *jsonJob.ParentID
+        }
+
         job := &gmaps.SocieteJob{
             Job: scrapemate.Job{
                 ID:         jsonJob.ID,
+                ParentID:   parentID,
                 URL:        jsonJob.URL,
                 URLParams:  jsonJob.URLParams,
                 MaxRetries: jsonJob.MaxRetries,
@@ -447,8 +652,14 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             return nil, fmt.Errorf("organization_id is missing or not a string")
         }
 
+        var parentID string
+        if jsonJob.ParentID != nil {
+            parentID = *jsonJob.ParentID
+        }
+
         job := gmaps.NewEmailJob(parentIDI, &entry, ownerID, organizationID)
         job.Job.ID = jsonJob.ID
+        job.Job.ParentID = parentID
         job.Job.URL = jsonJob.URL
         job.Job.URLParams = jsonJob.URLParams
         job.Job.MaxRetries = jsonJob.MaxRetries

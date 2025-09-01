@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gosom/scrapemate"
@@ -16,6 +15,7 @@ import (
 type dbEntry struct {
 	UserID              string
 	OrganizationID      string
+	ParentID            string
 	Link                string
 	PayloadType         string
 	Title               string
@@ -43,7 +43,6 @@ type resultWriter struct {
 	db *sql.DB
 }
 
-// checkDuplicateURL vérifie si une URL existe déjà pour un utilisateur donné
 func (r *resultWriter) checkDuplicateURL(ctx context.Context, url, userID, organizationID string) (bool, error) {
 	if url == "" {
 		return false, nil
@@ -75,6 +74,48 @@ func (r *resultWriter) checkDuplicateURL(ctx context.Context, url, userID, organ
 	}
 
 	return count > 0, nil
+}
+
+func (r *resultWriter) getParentJobID(ctx context.Context, jobID string) (string, error) {
+	var parentID sql.NullString
+	q := `SELECT parentId FROM gmaps_jobs WHERE id = $1`
+	err := r.db.QueryRowContext(ctx, q, jobID).Scan(&parentID)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get parent job ID: %w", err)
+	}
+	
+	if parentID.Valid {
+		return parentID.String, nil
+	}
+	
+	return "", nil
+}
+
+func (r *resultWriter) getRootParentJobID(ctx context.Context, jobID string) (string, error) {
+	currentJobID := jobID
+	visitedJobs := make(map[string]bool)
+	
+	for {
+		if visitedJobs[currentJobID] {
+			return "", fmt.Errorf("circular reference detected in job hierarchy")
+		}
+		visitedJobs[currentJobID] = true
+		
+		parentID, err := r.getParentJobID(ctx, currentJobID)
+		if err != nil {
+			return "", err
+		}
+		
+		if parentID == "" {
+			return currentJobID, nil
+		}
+		
+		currentJobID = parentID
+	}
 }
 
 func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) error {
@@ -119,6 +160,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 
 			var userID string
 			var organizationID string
+			var parentJobID string
 			var actualJob scrapemate.IJob = result.Job
 
 			if wrapper, ok := result.Job.(*jobWrapper); ok {
@@ -128,18 +170,41 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			if job, ok := actualJob.(*gmaps.GmapJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
+				parentJobID = job.GetID()
 			} else if job, ok := actualJob.(*gmaps.PlaceJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
+				
+				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
+				if err != nil {
+					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
+					parentJobID = job.ParentID
+				} else {
+					parentJobID = rootParentID
+				}
 			} else if job, ok := actualJob.(*gmaps.EmailExtractJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
+				
+				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
+				if err != nil {
+					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
+					parentJobID = job.ParentID
+				} else {
+					parentJobID = rootParentID
+				}
 			} else if job, ok := actualJob.(*gmaps.SocieteJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
+				
+				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
+				if err != nil {
+					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
+					rootParentID = job.GetID()
+				}
+				parentJobID = rootParentID
 			}
 
-			// Vérifier si cette URL existe déjà pour cet utilisateur
 			isDuplicate, err := r.checkDuplicateURL(ctx, simpleEntry.Link, userID, organizationID)
 			if err != nil {
 				log.Error(fmt.Sprintf("Error checking duplicate URL: %v", err))
@@ -154,6 +219,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			dbEntry := dbEntry{
 				UserID:              userID,
 				OrganizationID:      organizationID,
+				ParentID:            parentJobID,
 				Link:                simpleEntry.Link,
 				PayloadType:         payloadType,
 				Title:               simpleEntry.Title,
@@ -207,54 +273,45 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 	}
 
 	log := scrapemate.GetLoggerFromContext(ctx)
-
 	log.Info(fmt.Sprintf("Saving %d entries", len(entries)))
-
-	q := `INSERT INTO results
-		(user_id, organization_id, link, payload_type, title, category, address, website, phone, emails,
-		 societe_dirigeant, societe_dirigeant_link, societe_forme, societe_effectif, 
-		 societe_creation, societe_cloture, societe_link)
-		VALUES
-		`
-	elements := make([]string, 0, len(entries))
-	args := make([]interface{}, 0, len(entries)*17)
-
-	for i, item := range entries {
-		elements = append(elements, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", 
-			i*17+1, i*17+2, i*17+3, i*17+4, i*17+5, i*17+6, i*17+7, i*17+8, 
-			i*17+9, i*17+10, i*17+11, i*17+12, i*17+13, i*17+14, i*17+15, i*17+16, i*17+17))
-		args = append(args, 
-			item.UserID, item.OrganizationID, item.Link, item.PayloadType, item.Title, item.Category, 
-			item.Address, item.Website, item.Phone, item.Emails, item.SocieteDirigeant, 
-			item.SocieteDirigeantLink, item.SocieteForme, item.SocieteEffectif, 
-			item.SocieteCreation, item.SocieteCloture, item.SocieteLink)
-	}
-
-	q += strings.Join(elements, ", ")
-
-	log.Info(fmt.Sprintf("Saving %d entries with query: %s", len(entries), q))
-
-	log.Info(fmt.Sprintf("Saving %d entries with query: %s", len(entries), q))
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	_, err = tx.ExecContext(ctx, q, args...)
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO results (
+			parentid, user_id, organization_id, link, payload_type, 
+			title, category, address, website, phone, emails,
+			societe_dirigeant, societe_dirigeant_link, societe_forme, 
+			societe_effectif, societe_creation, societe_cloture, societe_link
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 
+			$12, $13, $14, $15, $16, $17, $18
+		)`)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, entry := range entries {
+		_, err := stmt.ExecContext(ctx,
+			entry.ParentID, entry.UserID, entry.OrganizationID, entry.Link, entry.PayloadType,
+			entry.Title, entry.Category, entry.Address, entry.Website, entry.Phone, entry.Emails,
+			entry.SocieteDirigeant, entry.SocieteDirigeantLink, entry.SocieteForme,
+			entry.SocieteEffectif, entry.SocieteCreation, entry.SocieteCloture, entry.SocieteLink,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert entry: %w", err)
+		}
 	}
 
-	err = tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
 
-	log.Info(fmt.Sprintf("Saved %d entries", len(entries)))
-
-	log.Info(fmt.Sprintf("Saved %d entries", len(entries)))
-
-	return err
+	log.Info(fmt.Sprintf("Successfully saved %d entries", len(entries)))
+	return nil
 }
