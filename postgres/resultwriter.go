@@ -127,6 +127,13 @@ func (r *resultWriter) getRootParentJobID(ctx context.Context, jobID string) (st
 
 func (r *resultWriter) callRevalidationAPI(ctx context.Context, userID string) {
 	if r.revalidationAPIURL == "" || userID == "" {
+		log := scrapemate.GetLoggerFromContext(ctx)
+		if r.revalidationAPIURL == "" {
+			log.Info(fmt.Sprintf("Skipping revalidation API call: revalidationAPIURL is empty (userID=%s)", userID))
+		}
+		if userID == "" {
+			log.Info(fmt.Sprintf("Skipping revalidation API call: userID is empty (revalidationAPIURL=%s)", r.revalidationAPIURL))
+		}
 		return
 	}
 
@@ -143,15 +150,22 @@ func (r *resultWriter) callRevalidationAPI(ctx context.Context, userID string) {
 
 	req.Header.Set("Content-Type", "application/json")
 
+	log := scrapemate.GetLoggerFromContext(ctx)
+	log.Info(fmt.Sprintf("Calling revalidation API: %s", r.revalidationAPIURL))
+
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
 		return
 	}
 	defer resp.Body.Close()
+
+	log.Info(fmt.Sprintf("Revalidation API response: %v", resp))
 }
 
 func (r *resultWriter) notifyRevalidation(ctx context.Context, entries []dbEntry) {
 	if r.revalidationAPIURL == "" {
+		log := scrapemate.GetLoggerFromContext(ctx)
+		log.Info(fmt.Sprintf("Skipping revalidation API call: revalidationAPIURL is empty (entries=%v)", entries))
 		return
 	}
 
