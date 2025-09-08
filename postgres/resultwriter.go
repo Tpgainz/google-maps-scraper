@@ -1,10 +1,13 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gosom/scrapemate"
@@ -33,14 +36,18 @@ type dbEntry struct {
 	SocieteLink         string
 }
 
-func NewResultWriter(db *sql.DB) scrapemate.ResultWriter {
+func NewResultWriter(db *sql.DB, revalidationAPIURL string) scrapemate.ResultWriter {
 	return &resultWriter{
-		db: db,
+		db:                 db,
+		revalidationAPIURL: revalidationAPIURL,
+		httpClient:         &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
 type resultWriter struct {
-	db *sql.DB
+	db                 *sql.DB
+	revalidationAPIURL string
+	httpClient         *http.Client
 }
 
 func (r *resultWriter) checkDuplicateURL(ctx context.Context, url, userID, organizationID string) (bool, error) {
@@ -78,7 +85,7 @@ func (r *resultWriter) checkDuplicateURL(ctx context.Context, url, userID, organ
 
 func (r *resultWriter) getParentJobID(ctx context.Context, jobID string) (string, error) {
 	var parentID sql.NullString
-	q := `SELECT parentId FROM gmaps_jobs WHERE id = $1`
+	q := `SELECT parent_id FROM gmaps_jobs WHERE id = $1`
 	err := r.db.QueryRowContext(ctx, q, jobID).Scan(&parentID)
 	
 	if err != nil {
@@ -115,6 +122,50 @@ func (r *resultWriter) getRootParentJobID(ctx context.Context, jobID string) (st
 		}
 		
 		currentJobID = parentID
+	}
+}
+
+func (r *resultWriter) callRevalidationAPI(ctx context.Context, userID string) {
+	if r.revalidationAPIURL == "" || userID == "" {
+		return
+	}
+
+	payload := map[string]string{"userId": userID}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", r.revalidationAPIURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+}
+
+func (r *resultWriter) notifyRevalidation(ctx context.Context, entries []dbEntry) {
+	if r.revalidationAPIURL == "" {
+		return
+	}
+
+	// Extract unique user IDs
+	userIDs := make(map[string]bool)
+	for _, entry := range entries {
+		if entry.UserID != "" {
+			userIDs[entry.UserID] = true
+		}
+	}
+
+	// Call revalidation API for each unique user ID
+	for userID := range userIDs {
+		go r.callRevalidationAPI(ctx, userID)
 	}
 }
 
@@ -170,7 +221,14 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			if job, ok := actualJob.(*gmaps.GmapJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
-				parentJobID = job.GetID()
+				
+				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
+				if err != nil {
+					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
+					parentJobID = job.GetID()
+				} else {
+					parentJobID = rootParentID
+				}
 			} else if job, ok := actualJob.(*gmaps.PlaceJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
@@ -283,7 +341,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO results (
-			parentid, user_id, organization_id, link, payload_type, 
+			parent_id, user_id, organization_id, link, payload_type, 
 			title, category, address, website, phone, emails,
 			societe_dirigeant, societe_dirigeant_link, societe_forme, 
 			societe_effectif, societe_creation, societe_cloture, societe_link
@@ -313,5 +371,9 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 	}
 
 	log.Info(fmt.Sprintf("Successfully saved %d entries", len(entries)))
+	
+	// Call revalidation API for unique user IDs
+	r.notifyRevalidation(ctx, entries)
+	
 	return nil
 }

@@ -18,6 +18,7 @@ import (
 const (
 	statusNew    = "new"
 	statusQueued = "queued"
+    statusProcessing = "processing" 
 	statusDone   = "done"
 	statusFailed = "failed"
 )
@@ -107,7 +108,7 @@ func (p *provider) pushChildJobs(ctx context.Context, parentJob scrapemate.IJob,
 
 func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrapemate.IJob, parentID string) error {
     q := `INSERT INTO gmaps_jobs
-        (id, parentId, priority, payload_type, payload, created_at, status)
+        (id, parent_id, priority, payload_type, payload, created_at, status)
         VALUES
         ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`
 
@@ -198,7 +199,7 @@ func (p *provider) markJobDone(ctx context.Context, job scrapemate.IJob, childJo
         }
     } else {
         q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
-        _, err = tx.ExecContext(ctx, q, "processing", job.GetID())
+        _, err = tx.ExecContext(ctx, q, statusProcessing, job.GetID())
         if err != nil {
             return err
         }
@@ -209,7 +210,7 @@ func (p *provider) markJobDone(ctx context.Context, job scrapemate.IJob, childJo
 
 func (p *provider) checkAndMarkParentDone(ctx context.Context, tx *sql.Tx, jobID string) error {
     var parentID sql.NullString
-    err := tx.QueryRowContext(ctx, `SELECT parentId FROM gmaps_jobs WHERE id = $1`, jobID).Scan(&parentID)
+    err := tx.QueryRowContext(ctx, `SELECT parent_id FROM gmaps_jobs WHERE id = $1`, jobID).Scan(&parentID)
     if err != nil || !parentID.Valid {
         return err
     }
@@ -298,7 +299,7 @@ func (p *provider) Jobs(ctx context.Context) (<-chan scrapemate.IJob, <-chan err
 // Modifier la méthode Push pour inclure parent_id
 func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
     q := `INSERT INTO gmaps_jobs
-        (id, parentId, priority, payload_type, payload, created_at, status)
+        (id, parent_id, priority, payload_type, payload, created_at, status)
         VALUES
         ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`
 

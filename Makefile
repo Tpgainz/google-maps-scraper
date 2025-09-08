@@ -36,3 +36,19 @@ cross-compile: ## cross compiles the application
 	GOOS=linux GOARCH=amd64 go build -o bin/$(APP_NAME)-${VERSION}-linux-amd64
 	GOOS=darwin GOARCH=amd64 go build -o bin/$(APP_NAME)-${VERSION}-darwin-amd64
 	GOOS=windows GOARCH=amd64 go build -o bin/$(APP_NAME)-${VERSION}-windows-amd64.exe
+
+fix-stuck-jobs: ## fixes stuck jobs in the database (requires DATABASE_URL env var)
+	@if [ -z "$(DATABASE_URL)" ]; then \
+		echo "Error: DATABASE_URL environment variable is required"; \
+		echo "Usage: make fix-stuck-jobs DATABASE_URL=postgres://user:pass@host:port/dbname"; \
+		exit 1; \
+	fi
+	go run scripts/test_job_fixes.go $(DATABASE_URL)
+
+test-job-fixes: ## test the job fixes (requires DATABASE_URL env var)
+	@if [ -z "$(DATABASE_URL)" ]; then \
+		echo "Error: DATABASE_URL environment variable is required"; \
+		echo "Usage: make test-job-fixes DATABASE_URL=postgres://user:pass@host:port/dbname"; \
+		exit 1; \
+	fi
+	go run scripts/test_job_fixes.go $(DATABASE_URL)

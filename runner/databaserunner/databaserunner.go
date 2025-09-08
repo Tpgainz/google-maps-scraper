@@ -46,7 +46,7 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 		return &ans, nil
 	}
 
-	psqlWriter := postgres.NewResultWriter(conn)
+	psqlWriter := postgres.NewResultWriter(conn, cfg.RevalidationAPIURL)
 
 	writers := []scrapemate.ResultWriter{
 		psqlWriter,
