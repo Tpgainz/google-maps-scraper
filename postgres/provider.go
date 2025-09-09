@@ -240,14 +240,28 @@ func (p *provider) checkAndMarkParentDone(ctx context.Context, tx *sql.Tx, jobID
     return nil
 }
 
-func (p *provider) MarkDone(ctx context.Context, job scrapemate.IJob) error {
-    return p.markJobDone(ctx, job, 0)
-}
-
 func (p *provider) MarkFailed(ctx context.Context, job scrapemate.IJob) error {
+    tx, err := p.db.BeginTx(ctx, nil)
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+
+    // Marquer le job comme failed
     q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
-    _, err := p.db.ExecContext(ctx, q, statusFailed, job.GetID())
-    return err
+    log := scrapemate.GetLoggerFromContext(ctx)
+    log.Info(fmt.Sprintf("Marking job %s as failed", job.GetID()))
+    _, err = tx.ExecContext(ctx, q, statusFailed, job.GetID())
+    if err != nil {
+        return err
+    }
+    log.Info(fmt.Sprintf("Incrementing parent counter for job %s", job.GetID()))
+    // Incrémenter le compteur du parent
+    if err := p.checkAndMarkParentDone(ctx, tx, job.GetID()); err != nil {
+        return err
+    }
+
+    return tx.Commit()
 }
 
 //nolint:gocritic // it contains about unnamed results
