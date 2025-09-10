@@ -37,7 +37,7 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 
 	ans := dbrunner{
 		cfg:      cfg,
-		provider: postgres.NewProvider(conn),
+		provider: postgres.NewProvider(conn, cfg.RevalidationAPIURL),
 		produce:  cfg.ProduceOnly,
 		conn:     conn,
 	}

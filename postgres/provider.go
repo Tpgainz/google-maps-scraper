@@ -1,11 +1,13 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -37,19 +39,23 @@ type JSONJob struct {
 }
 
 type provider struct {
-	db      *sql.DB
-	mu      *sync.Mutex
-	jobc    chan scrapemate.IJob
-	errc    chan error
-	started bool
+	db                 *sql.DB
+	mu                 *sync.Mutex
+	jobc               chan scrapemate.IJob
+	errc               chan error
+	started            bool
+	revalidationAPIURL string
+	httpClient         *http.Client
 }
 
-func NewProvider(db *sql.DB) scrapemate.JobProvider {
+func NewProvider(db *sql.DB, revalidationAPIURL string) scrapemate.JobProvider {
 	prov := provider{
-		db:   db,
-		mu:   &sync.Mutex{},
-		errc: make(chan error, 1),
-		jobc: make(chan scrapemate.IJob, 100),
+		db:                 db,
+		mu:                 &sync.Mutex{},
+		errc:               make(chan error, 1),
+		jobc:               make(chan scrapemate.IJob, 100),
+		revalidationAPIURL: revalidationAPIURL,
+		httpClient:         &http.Client{Timeout: 10 * time.Second},
 	}
 
 	return &prov
@@ -72,6 +78,10 @@ func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (an
         
         if err := w.provider.markJobDone(ctx, w.IJob, len(nextJobs)); err != nil {
             return data, nextJobs, err
+        }
+        
+        if gmapJob, ok := w.IJob.(*gmaps.GmapJob); ok {
+            w.provider.callRevalidationAPI(ctx, gmapJob.OwnerID)
         }
     } else {
         _ = w.provider.MarkFailed(ctx, w.IJob)
@@ -238,6 +248,43 @@ func (p *provider) checkAndMarkParentDone(ctx context.Context, tx *sql.Tx, jobID
     }
     
     return nil
+}
+
+func (p *provider) callRevalidationAPI(ctx context.Context, userID string) {
+	if p.revalidationAPIURL == "" || userID == "" {
+		log := scrapemate.GetLoggerFromContext(ctx)
+		if p.revalidationAPIURL == "" {
+			log.Info(fmt.Sprintf("Skipping revalidation API call: revalidationAPIURL is empty (userID=%s)", userID))
+		}
+		if userID == "" {
+			log.Info(fmt.Sprintf("Skipping revalidation API call: userID is empty (revalidationAPIURL=%s)", p.revalidationAPIURL))
+		}
+		return
+	}
+
+	payload := map[string]string{"userId": userID}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.revalidationAPIURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	log := scrapemate.GetLoggerFromContext(ctx)
+	log.Info(fmt.Sprintf("Calling revalidation API: %s", p.revalidationAPIURL))
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Info(fmt.Sprintf("Revalidation API response: %v", resp))
 }
 
 func (p *provider) MarkFailed(ctx context.Context, job scrapemate.IJob) error {
