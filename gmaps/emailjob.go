@@ -2,6 +2,7 @@ package gmaps
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"strings"
 
@@ -13,7 +14,8 @@ import (
 )
 
 var (
-	EmailRegex = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z\-]+\.[a-z\-]+$`)
+	EmailRegex = regexp.MustCompile(`(?i)^[a-z0-9._%+\-]+@[a-z0-9\-]+\.[a-z\-]+$`)
+	ExcludedDomains = []string{"sentry", "example", "wix"}
 )
 
 type EmailExtractJobOptions func(*EmailExtractJob)
@@ -167,5 +169,13 @@ func getValidEmail(s string) (string, error) {
 		return "", err
 	}
 
-	return email.String(), nil
+	emailStr := email.String()
+	
+	for _, excludedDomain := range ExcludedDomains {
+		if strings.Contains(strings.ToLower(emailStr), excludedDomain) {
+			return "", errors.New("email contains excluded domain")
+		}
+	}
+
+	return emailStr, nil
 }

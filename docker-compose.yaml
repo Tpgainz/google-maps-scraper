@@ -1,7 +1,7 @@
 services:
   scraper:
     build: .
-    command: -dsn "postgres://postgres:postgres@db:5432/postgres" -c 2 -depth 10 -revalidation-api "http://nextapp:3000/api/results/revalidate"
+    command: -dsn "postgres://postgres:postgres@db:5432/postgres" -c 2 -depth 10 -revalidation-api "http://localhost:3000/api/results/revalidate"
     restart: unless-stopped
     networks:
       - backend

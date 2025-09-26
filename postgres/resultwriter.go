@@ -27,6 +27,8 @@ type dbEntry struct {
 	Website             string
 	Phone               string
 	Emails              []string
+	Latitude            float64
+	Longitude           float64
 	SocieteDirigeant    string
 	SocieteDirigeantLink string
 	SocieteForme        string
@@ -300,6 +302,8 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				Website:             simpleEntry.WebSite,
 				Phone:               simpleEntry.Phone,
 				Emails:              simpleEntry.Emails,
+				Latitude:            entry.Latitude,
+				Longitude:           entry.Longtitude,
 				SocieteDirigeant:    "",
 				SocieteDirigeantLink: "",
 				SocieteForme:        "",
@@ -356,12 +360,12 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO results (
 			parent_id, user_id, organization_id, link, payload_type, 
-			title, category, address, website, phone, emails,
+			title, category, address, website, phone, emails, latitude, longitude,
 			societe_dirigeant, societe_dirigeant_link, societe_forme, 
 			societe_effectif, societe_creation, societe_cloture, societe_link
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 
-			$12, $13, $14, $15, $16, $17, $18
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 
+			$13, $14, $15, $16, $17, $18, $19, $20
 		)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
@@ -372,7 +376,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 		_, err := stmt.ExecContext(ctx,
 			entry.ParentID, entry.UserID, entry.OrganizationID, entry.Link, entry.PayloadType,
 			entry.Title, entry.Category, entry.Address, entry.Website, entry.Phone, entry.Emails,
-			entry.SocieteDirigeant, entry.SocieteDirigeantLink, entry.SocieteForme,
+			entry.Latitude, entry.Longitude, entry.SocieteDirigeant, entry.SocieteDirigeantLink, entry.SocieteForme,
 			entry.SocieteEffectif, entry.SocieteCreation, entry.SocieteCloture, entry.SocieteLink,
 		)
 		if err != nil {
