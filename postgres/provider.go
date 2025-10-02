@@ -157,13 +157,6 @@ func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrape
             "owner_id": j.OwnerID,
             "organization_id": j.OrganizationID,
         }
-    case *gmaps.SocieteJob:
-        jsonJob.JobType = "societe"
-        jsonJob.Metadata = map[string]interface{}{
-            "extract_email": j.ExtractEmail,
-            "owner_id":       j.OwnerID,
-            "organization_id": j.OrganizationID,
-        }
     default:
         return errors.New("invalid job type")
     }
@@ -409,16 +402,6 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
             "owner_id": j.OwnerID,
             "organization_id": j.OrganizationID,
         }
-    case *gmaps.SocieteJob:
-        if j.ParentID != "" {
-            parentID = &j.ParentID
-        }
-        jsonJob.JobType = "societe"
-        jsonJob.Metadata = map[string]interface{}{
-            "extract_email": j.ExtractEmail,
-            "owner_id":       j.OwnerID,
-            "organization_id": j.OrganizationID,
-        }
     default:
         return errors.New("invalid job type")
     }
@@ -647,41 +630,6 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             OrganizationID:      organizationID,
         }
         
-        return job, nil
-    case "societe":
-        extractEmail, ok := jsonJob.Metadata["extract_email"].(bool)
-        if !ok {
-            return nil, fmt.Errorf("extract_email is missing or not a boolean")
-        }
-        
-        ownerID, ok := jsonJob.Metadata["owner_id"].(string)
-        if !ok {
-            return nil, fmt.Errorf("owner_id is missing or not a string")
-        }
-
-        organizationID, ok := jsonJob.Metadata["organization_id"].(string)
-        if !ok {
-            return nil, fmt.Errorf("organization_id is not a string")
-        }
-        
-        var parentID string
-        if jsonJob.ParentID != nil {
-            parentID = *jsonJob.ParentID
-        }
-
-        job := &gmaps.SocieteJob{
-            Job: scrapemate.Job{
-                ID:         jsonJob.ID,
-                ParentID:   parentID,
-                URL:        jsonJob.URL,
-                URLParams:  jsonJob.URLParams,
-                MaxRetries: jsonJob.MaxRetries,
-                Priority:   jsonJob.Priority,
-            },
-            ExtractEmail: extractEmail,
-            OwnerID:       ownerID,
-            OrganizationID: organizationID,
-        }
         return job, nil
     case "email":
         parentIDI, ok := jsonJob.Metadata["parent_id"].(string)

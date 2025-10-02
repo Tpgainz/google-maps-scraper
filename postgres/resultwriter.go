@@ -29,8 +29,8 @@ type dbEntry struct {
 	Emails              []string
 	Latitude            float64
 	Longitude           float64
-	SocieteDirigeant    string
-	SocieteDirigeantLink string
+	SocieteDirigeants   string
+	SocieteSiren        string
 	SocieteForme        string
 	SocieteEffectif     string
 	SocieteCreation     string
@@ -210,7 +210,6 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				return errors.New("invalid data type")
 			}
 
-			simpleEntry := entry.ToSimpleEntry()
 
 			payloadType := "place"
 			
@@ -220,8 +219,6 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 					payloadType = "search"
 				case *gmaps.PlaceJob:
 					payloadType = "place"
-				case *gmaps.SocieteJob:
-					payloadType = "societe"
 				}
 			}
 
@@ -267,26 +264,16 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				} else {
 					parentJobID = rootParentID
 				}
-			} else if job, ok := actualJob.(*gmaps.SocieteJob); ok {
-				userID = job.OwnerID
-				organizationID = job.OrganizationID
-				
-				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
-				if err != nil {
-					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
-					rootParentID = job.GetID()
-				}
-				parentJobID = rootParentID
 			}
 
-			isDuplicate, err := r.checkDuplicateURL(ctx, simpleEntry.Link, userID, organizationID)
+			isDuplicate, err := r.checkDuplicateURL(ctx, entry.Link, userID, organizationID)
 			if err != nil {
 				log.Error(fmt.Sprintf("Error checking duplicate URL: %v", err))
 				continue
 			}
 
 			if isDuplicate {
-				log.Info(fmt.Sprintf("Skipping duplicate URL %s for user %s", simpleEntry.Link, userID))
+				log.Info(fmt.Sprintf("Skipping duplicate URL %s for user %s", entry.Link, userID))
 				continue
 			}
 
@@ -294,18 +281,18 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				UserID:              userID,
 				OrganizationID:      organizationID,
 				ParentID:            parentJobID,
-				Link:                simpleEntry.Link,
+				Link:                entry.Link,
 				PayloadType:         payloadType,
-				Title:               simpleEntry.Title,
-				Category:            simpleEntry.Category,
-				Address:             simpleEntry.Address,
-				Website:             simpleEntry.WebSite,
-				Phone:               simpleEntry.Phone,
-				Emails:              simpleEntry.Emails,
+				Title:               entry.Title,
+				Category:            entry.Category,
+				Address:             entry.Address,
+				Website:             entry.WebSite,
+				Phone:               entry.Phone,
+				Emails:              entry.Emails,
 				Latitude:            entry.Latitude,
 				Longitude:           entry.Longtitude,
-				SocieteDirigeant:    "",
-				SocieteDirigeantLink: "",
+				SocieteDirigeants:   "",
+				SocieteSiren:        "",
 				SocieteForme:        "",
 				SocieteEffectif:     "",
 				SocieteCreation:     "",
@@ -361,7 +348,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 		INSERT INTO results (
 			parent_id, user_id, organization_id, link, payload_type, 
 			title, category, address, website, phone, emails, latitude, longitude,
-			societe_dirigeant, societe_dirigeant_link, societe_forme, 
+			societe_dirigeants, societe_siren, societe_forme, 
 			societe_effectif, societe_creation, societe_cloture, societe_link
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 
@@ -376,7 +363,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 		_, err := stmt.ExecContext(ctx,
 			entry.ParentID, entry.UserID, entry.OrganizationID, entry.Link, entry.PayloadType,
 			entry.Title, entry.Category, entry.Address, entry.Website, entry.Phone, entry.Emails,
-			entry.Latitude, entry.Longitude, entry.SocieteDirigeant, entry.SocieteDirigeantLink, entry.SocieteForme,
+			entry.Latitude, entry.Longitude, entry.SocieteDirigeants, entry.SocieteSiren, entry.SocieteForme,
 			entry.SocieteEffectif, entry.SocieteCreation, entry.SocieteCloture, entry.SocieteLink,
 		)
 		if err != nil {
