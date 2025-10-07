@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gosom/scrapemate"
@@ -205,6 +206,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				return nil
 			}
 
+
 			entry, ok := result.Data.(*gmaps.Entry)
 			if !ok {
 				return errors.New("invalid data type")
@@ -291,13 +293,13 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				Emails:              entry.Emails,
 				Latitude:            entry.Latitude,
 				Longitude:           entry.Longtitude,
-				SocieteDirigeants:   "",
-				SocieteSiren:        "",
-				SocieteForme:        "",
+				SocieteDirigeants:   strings.Join(entry.SocieteDirigeants, ","),
+				SocieteSiren:        entry.SocieteSiren,
+				SocieteForme:        entry.SocieteForme,
 				SocieteEffectif:     "",
-				SocieteCreation:     "",
-				SocieteCloture:      "",
-				SocieteLink:         "",
+				SocieteCreation:     entry.SocieteCreation,
+				SocieteCloture:      entry.SocieteCloture,
+				SocieteLink:         entry.SocieteLink,
 			}
 
 			buff = append(buff, dbEntry)

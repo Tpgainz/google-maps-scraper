@@ -22,6 +22,7 @@ type PlaceJob struct {
 	OrganizationID      string
 	UsageInResultststs  bool
 	ExtractEmail        bool
+	ExtractBodacc       bool
 	ExitMonitor         exiter.Exiter
 	ExtractExtraReviews bool
 }
@@ -62,6 +63,12 @@ func WithPlaceJobExitMonitor(exitMonitor exiter.Exiter) PlaceJobOptions {
 	}
 }
 
+func WithBodaccExtraction() PlaceJobOptions {
+	return func(j *PlaceJob) {
+		j.ExtractBodacc = true
+	}
+}
+
 func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, []scrapemate.IJob, error) {
 	defer func() {
 		resp.Document = nil
@@ -90,6 +97,9 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 		entry.AddExtraReviews(allReviewsRaw.pages)
 	}
 
+	var childJobs []scrapemate.IJob
+
+	// Create email extraction job if enabled
 	if j.ExtractEmail && entry.IsWebsiteValidForEmail() {
 		opts := []EmailExtractJobOptions{}
 		if j.ExitMonitor != nil {
@@ -97,10 +107,26 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 		}
 
 		emailJob := NewEmailJob(j.ID, &entry, j.OwnerID, j.OrganizationID, opts...)
+		childJobs = append(childJobs, emailJob)
+	}
 
+	// Create BODACC job if enabled and we have company information
+	if j.ExtractBodacc && entry.Title != "" && entry.Address != "" {
+		bodaccJob := NewBodaccJob(
+			entry.Title,
+			entry.Address,
+			j.OwnerID,
+			j.OrganizationID,
+			&entry,
+			WithBodaccJobParentID(j.ID),
+			WithBodaccJobPriority(int(scrapemate.PriorityHigh)),
+		)
+		childJobs = append(childJobs, bodaccJob)
+	}
+
+	if len(childJobs) > 0 {
 		j.UsageInResultststs = false
-
-		return nil, []scrapemate.IJob{emailJob}, nil
+		return &entry, childJobs, nil
 	} else if j.ExitMonitor != nil {
 		j.ExitMonitor.IncrPlacesCompleted(1)
 	}
