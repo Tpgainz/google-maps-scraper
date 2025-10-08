@@ -85,6 +85,12 @@ func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (an
         }
     } else {
         _ = w.provider.MarkFailed(ctx, w.IJob)
+        
+        if placeJob, ok := w.IJob.(*gmaps.PlaceJob); ok && placeJob.ExitMonitor != nil {
+            placeJob.ExitMonitor.IncrPlacesCompleted(1)
+        } else if searchJob, ok := w.IJob.(*gmaps.SearchJob); ok && searchJob.ExitMonitor != nil {
+            searchJob.ExitMonitor.IncrPlacesCompleted(0)
+        }
     }
     
     return data, nextJobs, err
