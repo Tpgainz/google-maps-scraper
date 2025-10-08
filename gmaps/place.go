@@ -127,6 +127,8 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 	if len(childJobs) > 0 {
 		j.UsageInResultststs = false
 		return &entry, childJobs, nil
+	} else if j.ExitMonitor != nil {
+		j.ExitMonitor.IncrPlacesCompleted(1)
 	}
 
 	return &entry, nil, err
