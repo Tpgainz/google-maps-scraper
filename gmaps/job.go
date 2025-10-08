@@ -127,6 +127,10 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 		placeJob := NewPlaceJob(j.ID, j.LangCode, resp.URL, j.OwnerID, j.OrganizationID, j.ExtractEmail, j.ExtractExtraReviews, jopts...)
 
 		next = append(next, placeJob)
+		
+		if j.ExitMonitor != nil {
+			j.ExitMonitor.IncrPlacesCompleted(1)
+		}
 	} else {
 		doc.Find(`div[role=feed] div[jsaction]>a`).Each(func(_ int, s *goquery.Selection) {
 			if href := s.AttrOr("href", ""); href != "" {
@@ -139,6 +143,10 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 
 				if j.Deduper == nil || j.Deduper.AddIfNotExists(ctx, href) {
 					next = append(next, nextJob)
+					
+					if j.ExitMonitor != nil {
+						j.ExitMonitor.IncrPlacesCompleted(1)
+					}
 				}
 			}
 		})
