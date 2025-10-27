@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -67,13 +66,27 @@ type jobWrapper struct {
 }
 
 func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (any, []scrapemate.IJob, error) {
+    log := scrapemate.GetLoggerFromContext(ctx)
+    log.Info(fmt.Sprintf("jobWrapper.Process: Processing job %s (type: %T)", w.IJob.GetID(), w.IJob))
+    
     data, nextJobs, err := w.IJob.Process(ctx, resp)
     
     if err == nil {
+        var wrappedNextJobs []scrapemate.IJob
         if len(nextJobs) > 0 {
-            if err := w.provider.pushChildJobs(ctx, w.IJob, nextJobs); err != nil {
-                return data, nextJobs, err
+            log.Info(fmt.Sprintf("jobWrapper.Process: Pushing %d child jobs for job %s", len(nextJobs), w.IJob.GetID()))
+            for i, job := range nextJobs {
+                log.Info(fmt.Sprintf("  Child job %d: type=%T, URL=%s", i, job, job.GetURL()))
             }
+            if err := w.provider.pushChildJobs(ctx, w.IJob, nextJobs); err != nil {
+                log.Error(fmt.Sprintf("jobWrapper.Process: Error pushing child jobs: %v", err))
+                return data, nextJobs, fmt.Errorf("while pushing jobs: %w", err)
+            }
+            wrappedNextJobs = make([]scrapemate.IJob, len(nextJobs))
+            for i := range nextJobs {
+                wrappedNextJobs[i] = &jobWrapper{IJob: nextJobs[i], provider: w.provider}
+            }
+            log.Info(fmt.Sprintf("jobWrapper.Process: Successfully pushed %d child jobs", len(nextJobs)))
         }
         
         if err := w.provider.markJobDone(ctx, w.IJob, len(nextJobs)); err != nil {
@@ -83,6 +96,8 @@ func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (an
         if gmapJob, ok := w.IJob.(*gmaps.GmapJob); ok {
             w.provider.callRevalidationAPI(ctx, gmapJob.OwnerID)
         }
+        
+        return data, wrappedNextJobs, err
     } else {
         _ = w.provider.MarkFailed(ctx, w.IJob)
     }
@@ -122,22 +137,32 @@ func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrape
         VALUES
         ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`
 
+    log := scrapemate.GetLoggerFromContext(ctx)
+
+    actualJob := job
+    if wrapper, ok := job.(*jobWrapper); ok {
+        actualJob = wrapper.IJob
+    }
+
+    log.Info(fmt.Sprintf("pushJobWithParent: job type=%T, URL=%s, parentID=%s", actualJob, actualJob.GetURL(), parentID))
+
     jsonJob := &JSONJob{
-        ID:         job.GetID(),
-        Priority:   job.GetPriority(),
-        URL:        job.GetURL(),
-        URLParams:  job.GetURLParams(),
-        MaxRetries: job.GetMaxRetries(),
+        ID:         actualJob.GetID(),
+        Priority:   actualJob.GetPriority(),
+        URL:        actualJob.GetURL(),
+        URLParams:  actualJob.GetURLParams(),
+        MaxRetries: actualJob.GetMaxRetries(),
         ParentID:   &parentID,
     }
 
-    switch j := job.(type) {
+    switch j := actualJob.(type) {
     case *gmaps.GmapJob:
         jsonJob.JobType = "search"
         jsonJob.Metadata = map[string]interface{}{
             "max_depth":     j.MaxDepth,
             "lang_code":     j.LangCode,
             "extract_email": j.ExtractEmail,
+            "extract_bodacc": j.ExtractBodacc,
             "owner_id":       j.OwnerID,
             "organization_id": j.OrganizationID,
         }
@@ -146,6 +171,7 @@ func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrape
         jsonJob.Metadata = map[string]interface{}{
             "usage_in_results": j.UsageInResultststs,
             "extract_email":    j.ExtractEmail,
+            "extract_bodacc":   j.ExtractBodacc,
             "owner_id":          j.OwnerID,
             "organization_id": j.OrganizationID,
         }
@@ -157,8 +183,25 @@ func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrape
             "owner_id": j.OwnerID,
             "organization_id": j.OrganizationID,
         }
+    case *gmaps.BodaccJob:
+        jsonJob.JobType = "bodacc"
+        jsonJob.Metadata = map[string]interface{}{
+            "company_name":     j.CompanyName,
+            "address":          j.Address,
+            "owner_id":         j.OwnerID,
+            "organization_id":  j.OrganizationID,
+            "entry":            j.Entry,
+        }
+    case *gmaps.PappersJob:
+        jsonJob.JobType = "pappers"
+        jsonJob.Metadata = map[string]interface{}{
+            "owner_id":         j.OwnerID,
+            "organization_id":  j.OrganizationID,
+            "entry":            j.Entry,
+        }
     default:
-        return errors.New("invalid job type")
+        log.Error(fmt.Sprintf("invalid job type in pushJobWithParent: %T", actualJob))
+        return fmt.Errorf("invalid job type in pushJobWithParent: %T", actualJob)
     }
 
     if jsonJob.ID == "" {
@@ -357,17 +400,25 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
         VALUES
         ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`
 
-    jsonJob := &JSONJob{
-        ID:         job.GetID(),
-        Priority:   job.GetPriority(),
-        URL:        job.GetURL(),
-        URLParams:  job.GetURLParams(),
-        MaxRetries: job.GetMaxRetries(),
+    log := scrapemate.GetLoggerFromContext(ctx)
+
+    actualJob := job
+    if wrapper, ok := job.(*jobWrapper); ok {
+        actualJob = wrapper.IJob
     }
 
-    // Récupérer le parentID du job et les métadonnées
+    log.Info(fmt.Sprintf("Push: job type=%T, URL=%s", actualJob, actualJob.GetURL()))
+
+    jsonJob := &JSONJob{
+        ID:         actualJob.GetID(),
+        Priority:   actualJob.GetPriority(),
+        URL:        actualJob.GetURL(),
+        URLParams:  actualJob.GetURLParams(),
+        MaxRetries: actualJob.GetMaxRetries(),
+    }
+
     var parentID *string
-    switch j := job.(type) {
+    switch j := actualJob.(type) {
     case *gmaps.GmapJob:
         if j.ParentID != "" {
             parentID = &j.ParentID
@@ -377,6 +428,7 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
             "max_depth":     j.MaxDepth,
             "lang_code":     j.LangCode,
             "extract_email": j.ExtractEmail,
+            "extract_bodacc": j.ExtractBodacc,
             "owner_id":       j.OwnerID,
             "organization_id": j.OrganizationID,
         }
@@ -388,6 +440,7 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
         jsonJob.Metadata = map[string]interface{}{
             "usage_in_results": j.UsageInResultststs,
             "extract_email":    j.ExtractEmail,
+            "extract_bodacc":   j.ExtractBodacc,
             "owner_id":          j.OwnerID,
             "organization_id": j.OrganizationID,
         }
@@ -402,8 +455,31 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
             "owner_id": j.OwnerID,
             "organization_id": j.OrganizationID,
         }
+    case *gmaps.BodaccJob:
+        if j.ParentID != "" {
+            parentID = &j.ParentID
+        }
+        jsonJob.JobType = "bodacc"
+        jsonJob.Metadata = map[string]interface{}{
+            "company_name":     j.CompanyName,
+            "address":          j.Address,
+            "owner_id":         j.OwnerID,
+            "organization_id":  j.OrganizationID,
+            "entry":            j.Entry,
+        }
+    case *gmaps.PappersJob:
+        if j.ParentID != "" {
+            parentID = &j.ParentID
+        }
+        jsonJob.JobType = "pappers"
+        jsonJob.Metadata = map[string]interface{}{
+            "owner_id":         j.OwnerID,
+            "organization_id":  j.OrganizationID,
+            "entry":            j.Entry,
+        }
     default:
-        return errors.New("invalid job type")
+        log.Error(fmt.Sprintf("invalid job type in Push: %T", actualJob))
+        return fmt.Errorf("invalid job type: %T", actualJob)
     }
 
     if jsonJob.ID == "" {
@@ -556,6 +632,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
         if !ok {
             return nil, fmt.Errorf("extract_email is missing or not a boolean")
         }
+        extractBodacc, _ := jsonJob.Metadata["extract_bodacc"].(bool)
         
         ownerID, ok := jsonJob.Metadata["owner_id"].(string)
         if !ok {
@@ -584,6 +661,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             MaxDepth:     maxDepth,
             LangCode:     langCode,
             ExtractEmail: extractEmail,
+            ExtractBodacc: extractBodacc,
             OwnerID:       ownerID,
             OrganizationID: organizationID,
         }
@@ -599,6 +677,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
         if !ok {
             return nil, fmt.Errorf("extract_email is missing or not a boolean")
         }
+        extractBodacc, _ := jsonJob.Metadata["extract_bodacc"].(bool)
         
         ownerID, ok := jsonJob.Metadata["owner_id"].(string)
         if !ok {
@@ -626,6 +705,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             },
             UsageInResultststs: usageInResults,
             ExtractEmail:       extractEmail,
+            ExtractBodacc:      extractBodacc,
             OwnerID:             ownerID,
             OrganizationID:      organizationID,
         }
@@ -678,6 +758,102 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
         job.OrganizationID = organizationID 
 
         return job, nil
+    case "bodacc":
+        companyName, ok := jsonJob.Metadata["company_name"].(string)
+        if !ok {
+            return nil, fmt.Errorf("company_name is missing or not a string")
+        }
+
+        address, ok := jsonJob.Metadata["address"].(string)
+        if !ok {
+            return nil, fmt.Errorf("address is missing or not a string")
+        }
+
+        ownerID, ok := jsonJob.Metadata["owner_id"].(string)
+        if !ok {
+            return nil, fmt.Errorf("owner_id is missing or not a string")
+        }
+
+        organizationID, ok := jsonJob.Metadata["organization_id"].(string)
+        if !ok {
+            return nil, fmt.Errorf("organization_id is missing or not a string")
+        }
+
+        var entry gmaps.Entry
+        if entryMap, ok := jsonJob.Metadata["entry"].(map[string]any); ok {
+            entryBytes, err := json.Marshal(entryMap)
+            if err != nil {
+                return nil, fmt.Errorf("failed to marshal entry: %w", err)
+            }
+            if err := json.Unmarshal(entryBytes, &entry); err != nil {
+                return nil, fmt.Errorf("failed to unmarshal entry: %w", err)
+            }
+        }
+
+        var parentID string
+        if jsonJob.ParentID != nil {
+            parentID = *jsonJob.ParentID
+        }
+
+        bodaccJob := &gmaps.BodaccJob{
+            Job: scrapemate.Job{
+                ID:         jsonJob.ID,
+                ParentID:   parentID,
+                URL:        jsonJob.URL,
+                URLParams:  jsonJob.URLParams,
+                MaxRetries: jsonJob.MaxRetries,
+                Priority:   jsonJob.Priority,
+            },
+            OwnerID:         ownerID,
+            OrganizationID:  organizationID,
+            CompanyName:     companyName,
+            Address:         address,
+            Entry:           &entry,
+        }
+
+        return bodaccJob, nil
+    case "pappers":
+        ownerID, ok := jsonJob.Metadata["owner_id"].(string)
+        if !ok {
+            return nil, fmt.Errorf("owner_id is missing or not a string")
+        }
+
+        organizationID, ok := jsonJob.Metadata["organization_id"].(string)
+        if !ok {
+            return nil, fmt.Errorf("organization_id is missing or not a string")
+        }
+
+        var entry gmaps.Entry
+        if entryMap, ok := jsonJob.Metadata["entry"].(map[string]any); ok {
+            entryBytes, err := json.Marshal(entryMap)
+            if err != nil {
+                return nil, fmt.Errorf("failed to marshal entry: %w", err)
+            }
+            if err := json.Unmarshal(entryBytes, &entry); err != nil {
+                return nil, fmt.Errorf("failed to unmarshal entry: %w", err)
+            }
+        }
+
+        var parentID string
+        if jsonJob.ParentID != nil {
+            parentID = *jsonJob.ParentID
+        }
+
+        pappersJob := &gmaps.PappersJob{
+            Job: scrapemate.Job{
+                ID:         jsonJob.ID,
+                ParentID:   parentID,
+                URL:        jsonJob.URL,
+                URLParams:  jsonJob.URLParams,
+                MaxRetries: jsonJob.MaxRetries,
+                Priority:   jsonJob.Priority,
+            },
+            OwnerID:         ownerID,
+            OrganizationID:  organizationID,
+            Entry:           &entry,
+        }
+
+        return pappersJob, nil
     default:
         return nil, fmt.Errorf("invalid payload type: %s", payloadType)
     }

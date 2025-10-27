@@ -57,6 +57,7 @@ type Config struct {
 	ProduceOnly              bool
 	ExitOnInactivityDuration time.Duration
 	Email                    bool
+    Bodacc                   bool
 	CustomWriter             string
 	GeoCoordinates           string
 	Zoom                     int
@@ -107,6 +108,7 @@ func ParseConfig() *Config {
 	flag.DurationVar(&cfg.ExitOnInactivityDuration, "exit-on-inactivity", 0, "exit after inactivity duration (e.g., '5m')")
 	flag.BoolVar(&cfg.JSON, "json", false, "produce JSON output instead of CSV")
 	flag.BoolVar(&cfg.Email, "email", false, "extract emails from websites")
+    flag.BoolVar(&cfg.Bodacc, "bodacc", false, "extract BODACC company info")
 	flag.StringVar(&cfg.CustomWriter, "writer", "", "use custom writer plugin (format: 'dir:pluginName')")
 	flag.StringVar(&cfg.GeoCoordinates, "geo", "", "set geo coordinates for search (e.g., '37.7749,-122.4194')")
 	flag.IntVar(&cfg.Zoom, "zoom", 15, "set zoom level (0-21) for search")

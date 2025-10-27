@@ -1,7 +1,6 @@
 package bodacc
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -264,13 +263,12 @@ func (s *BodaccService) enrichWithDirectors(result *BodaccSearchResult) *BodaccS
 		return result
 	}
 
+	// Note: We no longer scrape Pappers here because it's now handled by PappersJob in the workflow
+	// The BodaccJob will create a PappersJob if no directors are found
 	enrichedData := make([]BodaccCompanyInfo, 0, len(result.Data))
 	
 	for _, company := range result.Data {
-		if len(company.SocieteDirigeants) == 0 && company.PappersURL != "" {
-			directors := s.scrapeDirectorsFromPappers(company.PappersURL)
-			company.SocieteDirigeants = directors
-		}
+		// Removed automatic Pappers scraping - now handled by PappersJob workflow
 		enrichedData = append(enrichedData, company)
 	}
 
@@ -282,28 +280,30 @@ func (s *BodaccService) enrichWithDirectors(result *BodaccSearchResult) *BodaccS
 	}
 }
 
-func (s *BodaccService) scrapeDirectorsFromPappers(pappersURL string) []string {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+// DEPRECATED: This method is no longer used.
+// Pappers scraping is now handled by PappersJob in the main workflow.
+// func (s *BodaccService) scrapeDirectorsFromPappers(pappersURL string) []string {
+// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// 	defer cancel()
 
-	directorsWriter := NewDirectorsWriter()
-	app, err := s.createScrapemateApp(directorsWriter)
-	if err != nil {
-		log.Printf("Failed to create scrapemate app: %v", err)
-		return []string{}
-	}
-	defer app.Close()
+// 	directorsWriter := NewDirectorsWriter()
+// 	app, err := s.createScrapemateApp(directorsWriter)
+// 	if err != nil {
+// 		log.Printf("Failed to create scrapemate app: %v", err)
+// 		return []string{}
+// 	}
+// 	defer app.Close()
 
-	job := NewPappersScraperJob(&BodaccCompanyInfo{PappersURL: pappersURL})
+// 	job := NewPappersScraperJob(&BodaccCompanyInfo{PappersURL: pappersURL})
 	
-	err = app.Start(ctx, job)
-	if err != nil {
-		log.Printf("Failed to execute pappers scraping job: %v", err)
-		return []string{}
-	}
+// 	err = app.Start(ctx, job)
+// 	if err != nil {
+// 		log.Printf("Failed to execute pappers scraping job: %v", err)
+// 		return []string{}
+// 	}
 
-	return directorsWriter.GetDirectors()
-}
+// 	return directorsWriter.GetDirectors()
+// }
 
 func (s *BodaccService) createScrapemateApp(writer scrapemate.ResultWriter) (*scrapemateapp.ScrapemateApp, error) {
 	opts := []func(*scrapemateapp.Config) error{

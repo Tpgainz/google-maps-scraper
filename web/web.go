@@ -176,6 +176,7 @@ type formData struct {
 	Lon      string
 	Depth    int
 	Email    bool
+    Bodacc   bool
 	Proxies  []string
 }
 
@@ -239,6 +240,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		Lon:      "0",
 		Depth:    10,
 		Email:    false,
+        Bodacc:   false,
 	}
 
 	_ = tmpl.Execute(w, data)
@@ -330,7 +332,8 @@ func (s *Server) scrape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newJob.Data.Email = r.Form.Get("email") == "on"
+    newJob.Data.Email = r.Form.Get("email") == "on"
+    newJob.Data.Bodacc = r.Form.Get("bodacc") == "on"
 
 	proxies := strings.Split(r.Form.Get("proxies"), "\n")
 	if len(proxies) > 0 {
@@ -495,7 +498,7 @@ func (s *Server) apiScrape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newJob := Job{
+    newJob := Job{
 		ID:     uuid.New().String(),
 		Name:   req.Name,
 		Date:   time.Now().UTC(),

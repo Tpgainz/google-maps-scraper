@@ -26,6 +26,7 @@ type GmapJob struct {
 	MaxDepth     int
 	LangCode     string
 	ExtractEmail bool
+	ExtractBodacc bool
 	Deduper             deduper.Deduper
 	ExitMonitor         exiter.Exiter
 	ExtractExtraReviews bool
@@ -35,6 +36,7 @@ func NewGmapJob(
 	id, langCode, query, ownerID, organizationID string,
 	maxDepth int,
 	extractEmail bool,
+	extractBodacc bool,
 	geoCoordinates string,
 	zoom int,
 	opts ...GmapJobOptions,
@@ -70,6 +72,7 @@ func NewGmapJob(
 		MaxDepth:     maxDepth,
 		LangCode:     langCode,
 		ExtractEmail: extractEmail,
+		ExtractBodacc: extractBodacc,
 		OwnerID:      ownerID,
 		OrganizationID: organizationID,
 	}
@@ -123,6 +126,9 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 		if j.ExitMonitor != nil {
 			jopts = append(jopts, WithPlaceJobExitMonitor(j.ExitMonitor))
 		}
+		if j.ExtractBodacc {
+			jopts = append(jopts, WithBodaccExtraction())
+		}
 
 		placeJob := NewPlaceJob(j.ID, j.LangCode, resp.URL, j.OwnerID, j.OrganizationID, j.ExtractEmail, j.ExtractExtraReviews, jopts...)
 
@@ -133,6 +139,9 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 				jopts := []PlaceJobOptions{}
 				if j.ExitMonitor != nil {
 					jopts = append(jopts, WithPlaceJobExitMonitor(j.ExitMonitor))
+				}
+				if j.ExtractBodacc {
+					jopts = append(jopts, WithBodaccExtraction())
 				}
 
 				nextJob := NewPlaceJob(j.ID, j.LangCode, href, j.OwnerID, j.OrganizationID, j.ExtractEmail, j.ExtractExtraReviews, jopts...)

@@ -16,6 +16,7 @@ import (
 var (
 	EmailRegex = regexp.MustCompile(`(?i)^[a-z0-9._%+\-]+@[a-z0-9\-]+\.[a-z\-]+$`)
 	ExcludedDomains = []string{"sentry", "example", "wix"}
+    ExcludedSuffixes = []string{".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 )
 
 type EmailExtractJobOptions func(*EmailExtractJob)
@@ -118,16 +119,20 @@ func docEmailExtractor(doc *goquery.Document) []string {
 	var emails []string
 
 	doc.Find("a[href^='mailto:']").Each(func(_ int, s *goquery.Selection) {
-		mailto, exists := s.Attr("href")
-		if exists {
-			value := strings.TrimPrefix(mailto, "mailto:")
-			if email, err := getValidEmail(value); err == nil {
-				if !seen[email] {
-					emails = append(emails, email)
-					seen[email] = true
-				}
-			}
+		mailto, ok := s.Attr("href")
+		if !ok {
+			return
 		}
+		value := strings.TrimPrefix(mailto, "mailto:")
+		email, err := getValidEmail(value)
+		if err != nil {
+			return
+		}
+		if seen[email] {
+			return
+		}
+		emails = append(emails, email)
+		seen[email] = true
 	})
 
 	return emails
@@ -141,23 +146,29 @@ func regexEmailExtractor(body []byte) []string {
 	addresses := emailaddress.Find(body, false)
 	for i := range addresses {
 		v := addresses[i].String()
-		if email, err := getValidEmail(v); err == nil {
-			if !seen[email] {
-				emails = append(emails, email)
-				seen[email] = true
-			}
+		email, err := getValidEmail(v)
+		if err != nil {
+			continue
 		}
+		if seen[email] {
+			continue
+		}
+		emails = append(emails, email)
+		seen[email] = true
 	}
 
 	raw := string(body)
 	matches := EmailRegex.FindAllString(raw, -1)
 	for _, m := range matches {
-		if email, err := getValidEmail(m); err == nil {
-			if !seen[email] {
-				emails = append(emails, email)
-				seen[email] = true
-			}
+		email, err := getValidEmail(m)
+		if err != nil {
+			continue
 		}
+		if seen[email] {
+			continue
+		}
+		emails = append(emails, email)
+		seen[email] = true
 	}
 
 	return emails
@@ -170,12 +181,35 @@ func getValidEmail(s string) (string, error) {
 	}
 
 	emailStr := email.String()
-	
-	for _, excludedDomain := range ExcludedDomains {
-		if strings.Contains(strings.ToLower(emailStr), excludedDomain) {
-			return "", errors.New("email contains excluded domain")
-		}
+
+	lowerEmailStr := strings.ToLower(emailStr)
+	lowerInput := strings.ToLower(s)
+
+	if containsExcludedDomain(lowerEmailStr) {
+		return "", errors.New("email contains excluded domain")
+	}
+
+	if containsExcludedSuffix(lowerEmailStr, lowerInput) {
+		return "", errors.New("email contains excluded suffix")
 	}
 
 	return emailStr, nil
+}
+
+func containsExcludedDomain(email string) bool {
+	for _, excludedDomain := range ExcludedDomains {
+		if strings.Contains(email, excludedDomain) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsExcludedSuffix(email, input string) bool {
+	for _, suffix := range ExcludedSuffixes {
+		if strings.HasSuffix(email, suffix) || strings.Contains(input, suffix) {
+			return true
+		}
+	}
+	return false
 }
