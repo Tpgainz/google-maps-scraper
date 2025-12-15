@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"iter"
 	"math"
+	"net/url"
 	"runtime/debug"
 	"slices"
 	"strconv"
@@ -322,7 +323,10 @@ func EntryFromJSON(raw []byte, reviewCountOnly ...bool) (entry Entry, err error)
 	)
 	entry.OpenHours = getHours(darray)
 	entry.PopularTimes = getPopularTimes(darray)
-	entry.WebSite = getNthElementAndCast[string](darray, 7, 0)
+	rawWebSite := getNthElementAndCast[string](darray, 7, 0)
+	if rawWebSite != "" {
+		entry.WebSite = cleanGoogleRedirectURL(rawWebSite)
+	}
 	entry.Phone = getNthElementAndCast[string](darray, 178, 0, 0)
 	entry.PlusCode = getNthElementAndCast[string](darray, 183, 2, 2, 0)
 	entry.ReviewRating = getNthElementAndCast[float64](darray, 4, 7)
@@ -645,6 +649,41 @@ func decodeURL(url string) (string, error) {
 	}
 
 	return unquoted, nil
+}
+
+func cleanGoogleRedirectURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+
+	if strings.Contains(rawURL, "/url?q=") || strings.Contains(rawURL, "/url?Q=") {
+		var parseURL string
+		if strings.HasPrefix(rawURL, "/") {
+			parseURL = "https://www.google.com" + rawURL
+		} else {
+			parseURL = rawURL
+		}
+
+		parsedURL, err := url.Parse(parseURL)
+		if err != nil {
+			return rawURL
+		}
+
+		if q := parsedURL.Query().Get("q"); q != "" {
+			decoded, err := url.QueryUnescape(q)
+			if err == nil {
+				return decoded
+			}
+			return q
+		}
+	}
+
+	decoded, err := url.QueryUnescape(rawURL)
+	if err == nil {
+		return decoded
+	}
+
+	return rawURL
 }
 
 type EntryWithDistance struct {

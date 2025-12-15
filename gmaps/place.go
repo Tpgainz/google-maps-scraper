@@ -69,32 +69,21 @@ func WithBodaccExtraction() PlaceJobOptions {
 	}
 }
 
-func (j *PlaceJob) Process(ctx context.Context, resp *scrapemate.Response) (any, []scrapemate.IJob, error) {
+func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, []scrapemate.IJob, error) {
 	defer func() {
 		resp.Document = nil
 		resp.Body = nil
 		resp.Meta = nil
 	}()
 
-	log := scrapemate.GetLoggerFromContext(ctx)
-
-	// Ensure exit monitor is incremented even on parsing errors
-	defer func() {
-		if j.ExitMonitor != nil {
-			j.ExitMonitor.IncrPlacesCompleted(1)
-		}
-	}()
-
 	raw, ok := resp.Meta["json"].([]byte)
 	if !ok {
-		log.Error("Could not convert JSON to []byte, skipping place")
-		return nil, nil, nil
+		return nil, nil, fmt.Errorf("could not convert to []byte")
 	}
 
 	entry, err := EntryFromJSON(raw)
 	if err != nil {
-		log.Error(fmt.Sprintf("Failed to parse JSON for place %s: %v", j.GetURL(), err))
-		return nil, nil, nil
+		return nil, nil, err
 	}
 
 	entry.ID = j.ParentID
@@ -110,6 +99,7 @@ func (j *PlaceJob) Process(ctx context.Context, resp *scrapemate.Response) (any,
 
 	var childJobs []scrapemate.IJob
 
+	// Create email extraction job if enabled
 	if j.ExtractEmail && entry.IsWebsiteValidForEmail() {
 		opts := []EmailExtractJobOptions{}
 		if j.ExitMonitor != nil {
@@ -118,9 +108,9 @@ func (j *PlaceJob) Process(ctx context.Context, resp *scrapemate.Response) (any,
 
 		emailJob := NewEmailJob(j.ID, &entry, j.OwnerID, j.OrganizationID, opts...)
 		childJobs = append(childJobs, emailJob)
-		log.Info(fmt.Sprintf("Created email job for place: %s (URL: %s)", entry.Title, emailJob.URL))
 	}
 
+	// Create BODACC job if enabled and we have company information
 	if j.ExtractBodacc && entry.Title != "" && entry.Address != "" {
 		bodaccJob := NewBodaccJob(
 			entry.Title,
@@ -132,12 +122,10 @@ func (j *PlaceJob) Process(ctx context.Context, resp *scrapemate.Response) (any,
 			WithBodaccJobPriority(int(scrapemate.PriorityHigh)),
 		)
 		childJobs = append(childJobs, bodaccJob)
-		log.Info(fmt.Sprintf("Created bodacc job for place: %s (Company: %s, Address: %s)", entry.Title, bodaccJob.CompanyName, bodaccJob.Address))
 	}
 
 	if len(childJobs) > 0 {
 		j.UsageInResultststs = false
-		log.Info(fmt.Sprintf("PlaceJob returning %d child jobs for place: %s", len(childJobs), entry.Title))
 		return &entry, childJobs, nil
 	} else if j.ExitMonitor != nil {
 		j.ExitMonitor.IncrPlacesCompleted(1)
@@ -158,11 +146,7 @@ func (j *PlaceJob) BrowserActions(ctx context.Context, page playwright.Page) scr
 		return resp
 	}
 
-	if err = clickRejectCookiesIfRequired(page); err != nil {
-		resp.Error = err
-
-		return resp
-	}
+	clickRejectCookiesIfRequired(page)
 
 	const defaultTimeout = 5000
 
@@ -221,14 +205,33 @@ func (j *PlaceJob) BrowserActions(ctx context.Context, page playwright.Page) scr
 }
 
 func (j *PlaceJob) extractJSON(page playwright.Page) ([]byte, error) {
-	rawI, err := page.Evaluate(js)
+	var (
+		rawI any
+		err  error
+	)
+
+	// Retry logic: sometimes the data takes time to load
+	// Try up to 20 times with 1 second delay = 20 seconds total
+	for range 20 {
+		rawI, err = page.Evaluate(js)
+		if err == nil && rawI != nil {
+			break
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+
 	if err != nil {
 		return nil, err
 	}
 
+	if rawI == nil {
+		return nil, fmt.Errorf("APP_INITIALIZATION_STATE data not found")
+	}
+
 	raw, ok := rawI.(string)
 	if !ok {
-		return nil, fmt.Errorf("could not convert to string")
+		return nil, fmt.Errorf("could not convert to string, got type %T", rawI)
 	}
 
 	const prefix = `)]}'`
@@ -251,36 +254,20 @@ func (j *PlaceJob) UseInResults() bool {
 	return j.UsageInResultststs
 }
 
-func ctxWait(ctx context.Context, dur time.Duration) {
-	select {
-	case <-ctx.Done():
-	case <-time.After(dur):
-	}
-}
-
-
 const js = `
-function parse() {
-	try {
-		if (!window.APP_INITIALIZATION_STATE || !Array.isArray(window.APP_INITIALIZATION_STATE) || window.APP_INITIALIZATION_STATE.length < 4) {
-			return null;
-		}
-		const appState = window.APP_INITIALIZATION_STATE[3];
-		if (!appState || typeof appState !== 'object') {
-			return null;
-		}
-		const keys = Object.keys(appState);
-		if (keys.length === 0) {
-			return null;
-		}
-		const key = keys[0];
-		if (appState[key] && Array.isArray(appState[key]) && appState[key].length > 6) {
-			return appState[key][6];
-		}
-		return null;
-	} catch (error) {
-		console.error('Error parsing Google Maps data:', error);
+(function() {
+	if (!window.APP_INITIALIZATION_STATE || !window.APP_INITIALIZATION_STATE[3]) {
 		return null;
 	}
-}
+	const appState = window.APP_INITIALIZATION_STATE[3];
+	const keys = Object.keys(appState);
+	if (keys.length === 0) {
+		return null;
+	}
+	const key = keys[0];
+	if (appState[key] && appState[key][6]) {
+		return appState[key][6];
+	}
+	return null;
+})()
 `

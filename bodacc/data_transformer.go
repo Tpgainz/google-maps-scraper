@@ -74,14 +74,23 @@ func CreatePappersURL(commercant, siren string) string {
 }
 
 func TransformResult(result BodaccRawResult, dpcClosureDates map[string]string) BodaccCompanyInfo {
-	siren := strings.ReplaceAll(result.Registre[0], " ", "")
+	var siren string
+	if len(result.Registre) > 0 && result.Registre[0] != "" {
+		siren = strings.ReplaceAll(result.Registre[0], " ", "")
+	}
+
 	societeDirigeants, societeForme := ParsePersonnes(result.Listepersonnes)
 	
 	dateCloture := ParseDepot(result.Depot)
-	if dateCloture == "" {
+	if dateCloture == "" && siren != "" {
 		if closureDate, exists := dpcClosureDates[siren]; exists {
 			dateCloture = closureDate
 		}
+	}
+
+	pappersURL := ""
+	if siren != "" && result.Commercant != "" {
+		pappersURL = CreatePappersURL(result.Commercant, siren)
 	}
 
 	return BodaccCompanyInfo{
@@ -92,6 +101,6 @@ func TransformResult(result BodaccRawResult, dpcClosureDates map[string]string) 
 		SocieteCloture:    dateCloture,
 		SocieteLink:       result.URLComplete,
 		SocieteSiren:      siren,
-		PappersURL:        CreatePappersURL(result.Commercant, siren),
+		PappersURL:        pappersURL,
 	}
 }
