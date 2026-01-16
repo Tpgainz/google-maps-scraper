@@ -94,13 +94,13 @@ type Entry struct {
 	UserReviews         []Review               `json:"user_reviews"`
 	UserReviewsExtended []Review               `json:"user_reviews_extended"`
 	Emails              []string               `json:"emails"`
-	// BODACC fields
 	SocieteDirigeants   []string               `json:"societe_dirigeants"`
 	SocieteForme        string                 `json:"societe_forme"`
 	SocieteCreation     string                 `json:"societe_creation"`
 	SocieteCloture      string                 `json:"societe_cloture"`
 	SocieteSiren        string                 `json:"societe_siren"`
 	SocieteLink         string                 `json:"societe_link"`
+	SocieteDiffusion    bool                   `json:"societe_diffusion"`
 	PappersURL          string                 `json:"pappers_url"`
 }
 

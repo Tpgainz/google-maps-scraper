@@ -3,6 +3,14 @@ services:
     build: .
     command: -dsn "postgres://postgres:postgres@db:5432/postgres" -c 2 -depth 10 -revalidation-api "http://host.docker.internal:3000/api/results/revalidate"
     restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - INSEE_API_KEY=${INSEE_API_KEY:-}
+      - INPI_USERNAME=${INPI_USERNAME:-}
+      - INPI_PASSWORD=${INPI_PASSWORD:-}
+      - INPI_USE_DEMO=${INPI_USE_DEMO:-false}
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-0}
     networks:
       - backend
 

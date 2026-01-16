@@ -15,9 +15,16 @@ import (
 	"github.com/gosom/google-maps-scraper/runner/installplaywright"
 	"github.com/gosom/google-maps-scraper/runner/lambdaaws"
 	"github.com/gosom/google-maps-scraper/runner/webrunner"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if _, err := os.Stat("/.dockerenv"); os.IsNotExist(err) {
+		if err := godotenv.Load(); err != nil {
+			log.Printf("Warning: Error loading .env file: %v (continuing without it)", err)
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	runner.Banner()

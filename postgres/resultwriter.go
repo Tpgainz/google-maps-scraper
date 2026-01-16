@@ -36,6 +36,7 @@ type dbEntry struct {
 	SocieteCreation     string
 	SocieteCloture      string
 	SocieteLink         string
+	SocieteDiffusion    bool
 }
 
 func NewResultWriter(db *sql.DB, revalidationAPIURL string) scrapemate.ResultWriter {
@@ -163,7 +164,7 @@ func (r *resultWriter) callRevalidationAPI(ctx context.Context, userID string) {
 	}
 	defer resp.Body.Close()
 
-	log.Info(fmt.Sprintf("Revalidation API response: %v", resp))
+	log.Info(fmt.Sprintf("Revalidation API call successful"))
 }
 
 func (r *resultWriter) notifyRevalidation(ctx context.Context, entries []dbEntry) {
@@ -270,7 +271,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				} else {
 					parentJobID = rootParentID
 				}
-			} else if job, ok := actualJob.(*gmaps.BodaccJob); ok {
+			} else if job, ok := actualJob.(*gmaps.CompanyJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
 				
@@ -313,6 +314,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 					SocieteCreation:   entry.SocieteCreation,
 					SocieteCloture:    entry.SocieteCloture,
 					SocieteLink:       entry.SocieteLink,
+					SocieteDiffusion:  entry.SocieteDiffusion,
 				})
 				continue
 			}
@@ -338,6 +340,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				SocieteCreation:     entry.SocieteCreation,
 				SocieteCloture:      entry.SocieteCloture,
 				SocieteLink:         entry.SocieteLink,
+				SocieteDiffusion:    entry.SocieteDiffusion,
 			}
 
 			key := userID + "|" + organizationID + "|" + entry.Link
@@ -361,6 +364,9 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				}
 				if ex.SocieteLink == "" && dbEntry.SocieteLink != "" {
 					ex.SocieteLink = dbEntry.SocieteLink
+				}
+				if !ex.SocieteDiffusion && dbEntry.SocieteDiffusion {
+					ex.SocieteDiffusion = dbEntry.SocieteDiffusion
 				}
 				if ex.Website == "" && dbEntry.Website != "" {
 					ex.Website = dbEntry.Website
@@ -445,10 +451,10 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 			parent_id, user_id, organization_id, link, payload_type, 
 			title, category, address, website, phone, emails, latitude, longitude,
 			societe_dirigeants, societe_siren, societe_forme, 
-			societe_effectif, societe_creation, societe_cloture, societe_link
+			societe_effectif, societe_creation, societe_cloture, societe_link, societe_diffusion
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 
-			$13, $14, $15, $16, $17, $18, $19, $20
+			$13, $14, $15, $16, $17, $18, $19, $20, $21
 		)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
@@ -460,7 +466,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 			entry.ParentID, entry.UserID, entry.OrganizationID, entry.Link, entry.PayloadType,
 			entry.Title, entry.Category, entry.Address, entry.Website, entry.Phone, entry.Emails,
 			entry.Latitude, entry.Longitude, entry.SocieteDirigeants, entry.SocieteSiren, entry.SocieteForme,
-			entry.SocieteEffectif, entry.SocieteCreation, entry.SocieteCloture, entry.SocieteLink,
+			entry.SocieteEffectif, entry.SocieteCreation, entry.SocieteCloture, entry.SocieteLink, entry.SocieteDiffusion,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert entry: %w", err)
@@ -505,10 +511,11 @@ func (r *resultWriter) updateExistingIfEmpty(ctx context.Context, e dbEntry) err
         societe_forme = CASE WHEN (societe_forme IS NULL OR societe_forme = '') AND $8 <> '' THEN $8 ELSE societe_forme END,
         societe_creation = CASE WHEN (societe_creation IS NULL OR societe_creation = '') AND $9 <> '' THEN $9 ELSE societe_creation END,
         societe_cloture = CASE WHEN (societe_cloture IS NULL OR societe_cloture = '') AND $10 <> '' THEN $10 ELSE societe_cloture END,
-        societe_link = CASE WHEN (societe_link IS NULL OR societe_link = '') AND $11 <> '' THEN $11 ELSE societe_link END
+        societe_link = CASE WHEN (societe_link IS NULL OR societe_link = '') AND $11 <> '' THEN $11 ELSE societe_link END,
+        societe_diffusion = CASE WHEN societe_diffusion = false AND $12 = true THEN $12 ELSE societe_diffusion END
         WHERE link = $1 AND ` + idCond
 
-    args = append(args, e.Website, e.Phone, e.SocieteDirigeants, e.SocieteSiren, e.SocieteForme, e.SocieteCreation, e.SocieteCloture, e.SocieteLink)
+    args = append(args, e.Website, e.Phone, e.SocieteDirigeants, e.SocieteSiren, e.SocieteForme, e.SocieteCreation, e.SocieteCloture, e.SocieteLink, e.SocieteDiffusion)
 
     _, err := r.db.ExecContext(ctx, q, args...)
     return err

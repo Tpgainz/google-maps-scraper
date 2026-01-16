@@ -1,4 +1,5 @@
 # Google maps scraper
+
 ![build](https://github.com/gosom/google-maps-scraper/actions/workflows/build.yml/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gosom/google-maps-scraper)](https://goreportcard.com/report/github.com/gosom/google-maps-scraper)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289DA?logo=discord&logoColor=white)](https://discord.gg/fpaAVhNCCu)
@@ -16,6 +17,7 @@ Join our Discord server to get help, share ideas, and connect with other users o
 **Tired of manual data collection? Meet LeadsDB - an API service that integrates with this scraper.**
 
 [LeadsDB](https://gm.thexos.dev/) enhances your lead generation with:
+
 - ✅ Cloud storage for all your search results
 - ✅ Visualization dashboard
 - ✅ Advanced filtering & export options
@@ -29,7 +31,6 @@ Plans start at just €4.99/month
 _Continue using this free scraper and supercharge your workflow with LeadsDB._
 
 ## Sponsors
-
 
 ### Supported by the Community
 
@@ -56,6 +57,7 @@ Your support ensures the project remains maintained and continues to grow. Thank
 <b>At SerpApi, we scrape public data from Google Maps and other top search engines.</b>
 
 You can find the full list of our APIs here: [https://serpapi.com/search-api](https://serpapi.com/search-api)
+
 </td>
 </tr>
 </table>
@@ -68,10 +70,10 @@ You can find the full list of our APIs here: [https://serpapi.com/search-api](ht
 A no-code Google Maps scraper that pulls business leads from Google Maps in one click.
 
 - 📇 **Includes** emails, social profiles, phone numbers, addresses, reviews, images and more.
-- 📥 **Export** to CSV · Excel · JSON  
+- 📥 **Export** to CSV · Excel · JSON
 - 🔌 **API** Support: Extract data via [API](https://gmapsextractor.com/google-maps-api?utm_source=github&utm_medium=banner&utm_campaign=gosom)
 - 🎁 **Free**: Get your first **1,000 leads** today  
-[Get Started for Free](https://gmapsextractor.com?utm_source=github&utm_medium=banner&utm_campaign=gosom)
+  [Get Started for Free](https://gmapsextractor.com?utm_source=github&utm_medium=banner&utm_campaign=gosom)
 
 [![Gmaps Extractor](./img/gmaps-extractor-banner.png)](https://gmapsextractor.com?utm_source=github&utm_medium=banner&utm_campaign=gosom)
 
@@ -98,14 +100,11 @@ A no-code Google Maps scraper that pulls business leads from Google Maps in one 
 
 ![Scrapeless](./img/scrapeless_light.png#gh-light-mode-only)
 
-
-
 <hr>
-
 
 ## What Google maps scraper does
 
-A command line and web based google maps scraper build using 
+A command line and web based google maps scraper build using
 
 [scrapemate](https://github.com/gosom/scrapemate) web crawling framework.
 
@@ -126,7 +125,6 @@ Note: The results will take at least 3 minutes to appear, even if you add only o
 
 Note: for MacOS the docker command should not work. **HELP REQUIRED**
 
-
 ### Command line:
 
 ```
@@ -135,9 +133,10 @@ touch results.csv && docker run -v $PWD/example-queries.txt:/example-queries -v 
 
 file `results.csv` will contain the parsed results.
 
-**If you want emails use additionally the `-email` parameter*
+\*_If you want emails use additionally the `-email` parameter_
 
 ### REST API
+
 The Google Maps Scraper provides a RESTful API for programmatic management of scraping tasks.
 
 ### Key Endpoints
@@ -150,18 +149,16 @@ The Google Maps Scraper provides a RESTful API for programmatic management of sc
 
 For detailed API documentation, refer to the OpenAPI 3.0.3 specification available through Swagger UI or Redoc when running the app https://localhost:8080/api/docs
 
-
 ## 🌟 Support the Project!
 
-If you find this tool useful, consider giving it a **star** on GitHub. 
-Feel free to check out the **Sponsor** button on this repository to see how you can further support the development of this project. 
+If you find this tool useful, consider giving it a **star** on GitHub.
+Feel free to check out the **Sponsor** button on this repository to see how you can further support the development of this project.
 Your support helps ensure continued improvement and maintenance.
-
 
 ## Features
 
 - Extracts many data points from google maps
-- Exports the data to CSV, JSON or PostgreSQL 
+- Exports the data to CSV, JSON or PostgreSQL
 - Performance about 120 urls per minute (-depth 1 -c 8)
 - Extendable to write your own exporter
 - Dockerized for easy run in multiple platforms
@@ -173,138 +170,170 @@ Your support helps ensure continued improvement and maintenance.
 
 ## Notes on email extraction
 
-By default email extraction is disabled. 
+By default email extraction is disabled.
 
-If you enable email extraction (see quickstart) then the scraper will visit the 
+If you enable email extraction (see quickstart) then the scraper will visit the
 website of the business (if exists) and it will try to extract the emails from the
 page.
 
-For the moment it only checks only one page of the website (the one that is registered in Gmaps). At some point, it will be added support to try to extract from other pages like about, contact, impressum etc. 
-
+For the moment it only checks only one page of the website (the one that is registered in Gmaps). At some point, it will be added support to try to extract from other pages like about, contact, impressum etc.
 
 Keep in mind that enabling email extraction results to larger processing time, since more
-pages are scraped. 
+pages are scraped.
 
 ## Fast Mode
 
 Fast mode returns you at most 21 search results per query ordered by distance from the **latitude** and **longitude** provided.
 All the results are within the specified **radius**
 
-It does not contain all the data points but basic ones. 
-However it provides the ability to extract data really fast. 
+It does not contain all the data points but basic ones.
+However it provides the ability to extract data really fast.
 
 When you use the fast mode ensure that you have provided:
+
 - zoom
 - radius (in meters)
 - latitude
 - longitude
-
 
 **Fast mode is Beta, you may experience blocking**
 
 ## Extracted Data Points
 
 #### 1. `input_id`
+
 - Internal identifier for the input query.
 
 #### 2. `link`
+
 - Direct URL to the business listing on Google Maps.
 
 #### 3. `title`
+
 - Name of the business.
 
 #### 4. `category`
+
 - Business type or category (e.g., Restaurant, Hotel).
 
 #### 5. `address`
+
 - Street address of the business.
 
 #### 6. `open_hours`
+
 - Business operating hours.
 
 #### 7. `popular_times`
+
 - Estimated visitor traffic at different times of the day.
 
 #### 8. `website`
+
 - Official business website.
 
 #### 9. `phone`
+
 - Business contact phone number.
 
 #### 10. `plus_code`
+
 - Shortcode representing the precise location of the business.
 
 #### 11. `review_count`
+
 - Total number of customer reviews.
 
 #### 12. `review_rating`
+
 - Average star rating based on reviews.
 
 #### 13. `reviews_per_rating`
+
 - Breakdown of reviews by each star rating (e.g., number of 5-star, 4-star reviews).
 
 #### 14. `latitude`
+
 - Latitude coordinate of the business location.
 
 #### 15. `longitude`
+
 - Longitude coordinate of the business location.
 
 #### 16. `cid`
+
 - **Customer ID** (CID) used by Google Maps to uniquely identify a business listing. This ID remains stable across updates and can be used in URLs.
 - **Example:** `3D3174616216150310598`
 
 #### 17. `status`
+
 - Business status (e.g., open, closed, temporarily closed).
 
 #### 18. `descriptions`
+
 - Brief description of the business.
 
 #### 19. `reviews_link`
+
 - Direct link to the reviews section of the business listing.
 
 #### 20. `thumbnail`
+
 - URL to a thumbnail image of the business.
 
 #### 21. `timezone`
+
 - Time zone of the business location.
 
 #### 22. `price_range`
+
 - Price range of the business (`$`, `$$`, `$$$`).
 
 #### 23. `data_id`
+
 - An internal Google Maps identifier composed of two hexadecimal values separated by a colon.
 - **Structure:** `<spatial_hex>:<listing_hex>`
 - **Example:** `0x3eb33fecd7dfa167:0x2c0e80a0f5d57ec6`
 - **Note:** This value may change if the listing is updated and should not be used for permanent identification.
 
 #### 24. `images`
+
 - Links to images associated with the business.
 
 #### 25. `reservations`
+
 - Link to book reservations (if available).
 
 #### 26. `order_online`
+
 - Link to place online orders.
 
 #### 27. `menu`
+
 - Link to the menu (for applicable businesses).
 
 #### 28. `owner`
+
 - Indicates whether the business listing is claimed by the owner.
 
 #### 29. `complete_address`
+
 - Fully formatted address of the business.
 
 #### 30. `about`
+
 - Additional information about the business.
 
 #### 31. `user_reviews`
+
 - Collection of customer reviews, including text, rating, and timestamp.
 
 #### 32. `emails`
+
 - Email addresses associated with the business, if available.
 
 #### 33. `user_reviews_extended`
+
 - Collection of customer reviews, including text, rating, and timestamp. This includes all the
   reviews that can be extracted (up to around 300)
 
@@ -333,17 +362,15 @@ file `results.csv` will contain the parsed results.
 **If you want emails use additionally the `-email` parameter**
 
 **All Reviews**
-You can fetch up to around 300 reviews instead of the first 8 by using the 
+You can fetch up to around 300 reviews instead of the first 8 by using the
 command line parameter `--extra-reviews`. If you do that I recommend you use JSON
 output instead of CSV.
-
 
 ### On your host
 
 (tested only on Ubuntu 22.04)
 
 **make sure you use go version 1.24.3**
-
 
 ```
 git clone https://github.com/gosom/google-maps-scraper.git
@@ -362,6 +389,7 @@ The results are written when they arrive in the `results` file you specified
 ### Using a Proxy
 
 #### UI
+
 From the UI set the url, username and password
 
 #### Command line
@@ -394,10 +422,10 @@ Supported schemes:
 I encourange you to buy a proxy service from one of our sponsors.
 They are reliable and help me to maintain the project.
 
-
 ### Command line options
 
 try `./google-maps-scraper -h` to see the command line options available:
+
 ```
   -addr string
         address to listen on for web server (default ":8080")
@@ -467,7 +495,7 @@ try `./google-maps-scraper -h` to see the command line options available:
 
 In cases the results need to be written in a custom format or in another system like a db a message queue or basically anything the Go plugin system can be utilized.
 
-Write a Go plugin (see an example in examples/plugins/example_writeR.go) 
+Write a Go plugin (see an example in examples/plugins/example_writeR.go)
 
 Compile it using (for Linux):
 
@@ -475,7 +503,7 @@ Compile it using (for Linux):
 go build -buildmode=plugin -tags=plugin -o ~/mytest/plugins/example_writer.so examples/plugins/example_writer.go
 ```
 
-and then run the program using the `-writer` argument. 
+and then run the program using the `-writer` argument.
 
 See an example:
 
@@ -483,7 +511,6 @@ See an example:
 2. Build your plugin `go build -buildmode=plugin -tags=plugin -o ~/myplugins/example_writer.so plugins/example_writer.go`
 3. Download the lastes [release](https://github.com/gosom/google-maps-scraper/releases/) or build the program
 4. Run the program like `./google-maps-scraper -writer ~/myplugins:DummyPrinter -input example-queries.txt`
-
 
 ### Plugins and Docker
 
@@ -494,7 +521,6 @@ otherwise you will encounter an error like:
 ```
 /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.32' not found (required by /plugins/example_writer.so)
 ```
-
 
 ## Using Database Provider (postgreSQL)
 
@@ -522,7 +548,7 @@ go run main.go -dsn "postgres://postgres:postgres@localhost:5432/postgres" -prod
 
 (configure your queries and the desired language)
 
-This will populate the table `gmaps_jobs` . 
+This will populate the table `gmaps_jobs` .
 
 you may run the scraper using:
 
@@ -563,14 +589,70 @@ spec:
         args: ["-c", "1", "-depth", "10", "-dsn", "postgres://{DBUSER}:{DBPASSWD@DBHOST}:{DBPORT}/{DBNAME}", "-lang", "{LANGUAGE_CODE}"]
 ```
 
-Please replace the values or the command args accordingly 
+Please replace the values or the command args accordingly
 
-Note: Keep in mind that because the application starts a headless browser it requires CPU and memory. 
+Note: Keep in mind that because the application starts a headless browser it requires CPU and memory.
 Use an appropriate kubernetes cluster
+
+## Environment Variables
+
+### Docker Compose Configuration
+
+When using Docker Compose, you can configure the following environment variables:
+
+**INSEE API Configuration** (for French company data - recommended):
+
+- `INSEE_API_KEY` - Your INSEE API key (Integration key: `8ad55cfb-24c6-43c1-955c-fb24c663c1cc`)
+
+**INPI API Configuration** (alternative to INSEE):
+
+- `INPI_USERNAME` - Your INPI e-procedures account email/username
+- `INPI_PASSWORD` - Your INPI e-procedures account password
+- `INPI_USE_DEMO` - Set to `true` to use the demo/preprod environment (default: `false`)
+
+**Note**: The service automatically chains available APIs in order: INSEE → INPI → BODACC (fallback). Simply provide the credentials for the APIs you want to use. INSEE API is preferred as it's more flexible and doesn't require authentication tokens.
+
+**Other variables**:
+
+- `DISABLE_TELEMETRY` - Set to `1` to disable anonymous usage statistics (default: `0`)
+
+**Example usage**:
+
+Create a `.env` file in the project root:
+
+```bash
+# INSEE API (recommended)
+INSEE_API_KEY=8ad55cfb-24c6-43c1-955c-fb24c663c1cc
+
+# Or INPI API (alternative)
+INPI_USERNAME=your-email@example.com
+INPI_PASSWORD=your-password
+INPI_USE_DEMO=false
+
+# Or both - service will try INSEE first, then INPI, then BODACC
+
+DISABLE_TELEMETRY=0
+```
+
+**With Docker Compose**:
+
+```bash
+docker-compose up
+```
+
+The environment variables will be automatically passed to the container.
+
+**With command line**:
+
+```bash
+go run main.go -c 2 -depth 1 -dsn "postgres://postgres:postgres@localhost:5432/postgres"
+```
+
+The `.env` file will be automatically loaded at startup. If the file doesn't exist, the application will continue without it (a warning will be logged).
 
 ## Telemetry
 
-Anonymous usage statistics are collected for debug and improvement reasons. 
+Anonymous usage statistics are collected for debug and improvement reasons.
 You can opt out by setting the env variable `DISABLE_TELEMETRY=1`
 
 ## Performance
@@ -578,8 +660,8 @@ You can opt out by setting the env variable `DISABLE_TELEMETRY=1`
 Expected speed with concurrency of 8 and depth 1 is 120 jobs/per minute.
 Each search is 1 job + the number or results it contains.
 
-Based on the above: 
-if we have 1000 keywords to search with each contains 16 results => 1000 * 16 = 16000 jobs.
+Based on the above:
+if we have 1000 keywords to search with each contains 16 results => 1000 \* 16 = 16000 jobs.
 
 We expect this to take about 16000/120 ~ 133 minutes ~ 2.5 hours
 
@@ -594,21 +676,15 @@ For more instruction you may also read the following links
 - https://blog.gkomninos.com/distributed-google-maps-scraping
 - https://github.com/omkarcloud/google-maps-scraper/tree/master (also a nice project) [many thanks for the idea to extract the data by utilizing the JS objects]
 
-
 ## Licence
 
 This code is licensed under the MIT License
-
 
 ## Contributing
 
 Please open an ISSUE or make a Pull Request
 
-
 Thank you for considering support for the project. Every bit of assistance helps maintain momentum and enhances the scraper’s capabilities!
-
-
-
 
 ## Sponsors
 
@@ -621,7 +697,6 @@ Thank you for considering support for the project. Every bit of assistance helps
 ![Scrapeless](./img/scrapeless_dark.png#gh-dark-mode-only)
 
 ![Scrapeless](./img/scrapeless_light.png#gh-light-mode-only)
-
 
 <br>
 
@@ -643,8 +718,6 @@ Thank you for considering support for the project. Every bit of assistance helps
 
 [![Google Maps API for easy SERP scraping](https://www.searchapi.io/press/v1/svg/searchapi_logo_black_h.svg)](https://www.searchapi.io/google-maps?via=gosom)
 **Google Maps API for easy SERP scraping**
-
-
 
 ### Premium Sponsors
 
@@ -676,12 +749,12 @@ A no-code Google Maps scraper that pulls business leads from Google Maps in one 
 <b>At SerpApi, we scrape public data from Google Maps and other top search engines.</b>
 
 You can find the full list of our APIs here: [https://serpapi.com/search-api](https://serpapi.com/search-api)
+
 </td>
 </tr>
 </table>
 
 For more information, see [document](serpapi.md).
-
 
 <hr>
 
@@ -691,16 +764,14 @@ For more information, see [document](serpapi.md).
 
 For more information, see [scrap.io demo](scrap_io.md).
 
-
 ### Supported by the Community
 
 [Supported by the community](https://github.com/sponsors/gosom)
-
 
 ## Notes
 
 Please use this scraper responsibly and in accordance with all applicable laws and regulations. Unauthorized scraping of data may violate the terms of service of the website being scraped.
 
 banner is generated using OpenAI's DALL-E
-> **Note:** If you register via the links on my page, I may get a commission. This is another way to support my work
 
+> **Note:** If you register via the links on my page, I may get a commission. This is another way to support my work

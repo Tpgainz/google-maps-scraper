@@ -112,16 +112,16 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 
 	// Create BODACC job if enabled and we have company information
 	if j.ExtractBodacc && entry.Title != "" && entry.Address != "" {
-		bodaccJob := NewBodaccJob(
+		CompanyJob := NewCompanyJob(
 			entry.Title,
 			entry.Address,
 			j.OwnerID,
 			j.OrganizationID,
 			&entry,
-			WithBodaccJobParentID(j.ID),
-			WithBodaccJobPriority(int(scrapemate.PriorityHigh)),
+			WithCompanyJobParentID(j.ID),
+			WithCompanyJobPriority(int(scrapemate.PriorityHigh)),
 		)
-		childJobs = append(childJobs, bodaccJob)
+		childJobs = append(childJobs, CompanyJob)
 	}
 
 	if len(childJobs) > 0 {

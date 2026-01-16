@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gosom/scrapemate"
 
 	"github.com/google/uuid"
+	"github.com/gosom/google-maps-scraper/entreprise"
 	"github.com/gosom/google-maps-scraper/gmaps"
 )
 
@@ -47,6 +49,100 @@ type provider struct {
 	httpClient         *http.Client
 }
 
+type providerKey struct{}
+
+var _ gmaps.CompanyDataChecker = (*provider)(nil)
+
+func (p *provider) CheckCompanyDataExists(ctx context.Context, title, address, ownerID, organizationID string) (*entreprise.CompanyInfo, bool, error) {
+	if title == "" || address == "" {
+		return nil, false, nil
+	}
+
+	var q string
+	var args []interface{}
+
+	if ownerID != "" && organizationID != "" {
+		q = `SELECT 
+			societe_dirigeants, societe_siren, societe_forme, 
+			societe_creation, societe_cloture, societe_link, societe_diffusion
+			FROM results 
+			WHERE LOWER(TRIM(title)) = LOWER(TRIM($1)) 
+			AND LOWER(TRIM(address)) = LOWER(TRIM($2))
+			AND (user_id = $3 OR organization_id = $4)
+			AND (societe_dirigeants IS NOT NULL AND societe_dirigeants != '' 
+				OR societe_siren IS NOT NULL AND societe_siren != '')
+			LIMIT 1`
+		args = []interface{}{title, address, ownerID, organizationID}
+	} else if ownerID != "" {
+		q = `SELECT 
+			societe_dirigeants, societe_siren, societe_forme, 
+			societe_creation, societe_cloture, societe_link, societe_diffusion
+			FROM results 
+			WHERE LOWER(TRIM(title)) = LOWER(TRIM($1)) 
+			AND LOWER(TRIM(address)) = LOWER(TRIM($2))
+			AND user_id = $3
+			AND (societe_dirigeants IS NOT NULL AND societe_dirigeants != '' 
+				OR societe_siren IS NOT NULL AND societe_siren != '')
+			LIMIT 1`
+		args = []interface{}{title, address, ownerID}
+	} else if organizationID != "" {
+		q = `SELECT 
+			societe_dirigeants, societe_siren, societe_forme, 
+			societe_creation, societe_cloture, societe_link, societe_diffusion
+			FROM results 
+			WHERE LOWER(TRIM(title)) = LOWER(TRIM($1)) 
+			AND LOWER(TRIM(address)) = LOWER(TRIM($2))
+			AND organization_id = $3
+			AND (societe_dirigeants IS NOT NULL AND societe_dirigeants != '' 
+				OR societe_siren IS NOT NULL AND societe_siren != '')
+			LIMIT 1`
+		args = []interface{}{title, address, organizationID}
+	} else {
+		return nil, false, nil
+	}
+
+	var societeDirigeants, societeSiren, societeForme, societeCreation, societeCloture, societeLink sql.NullString
+	var societeDiffusion sql.NullBool
+	err := p.db.QueryRowContext(ctx, q, args...).Scan(
+		&societeDirigeants, &societeSiren, &societeForme,
+		&societeCreation, &societeCloture, &societeLink, &societeDiffusion,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to check BODACC data: %w", err)
+	}
+
+	data := &entreprise.CompanyInfo{}
+	if societeDirigeants.Valid && societeDirigeants.String != "" {
+		data.SocieteDirigeants = strings.Split(societeDirigeants.String, ",")
+		for i := range data.SocieteDirigeants {
+			data.SocieteDirigeants[i] = strings.TrimSpace(data.SocieteDirigeants[i])
+		}
+	}
+	if societeSiren.Valid {
+		data.SocieteSiren = societeSiren.String
+	}
+	if societeForme.Valid {
+		data.SocieteForme = societeForme.String
+	}
+	if societeCreation.Valid {
+		data.SocieteCreation = societeCreation.String
+	}
+	if societeCloture.Valid {
+		data.SocieteCloture = societeCloture.String
+	}
+	if societeLink.Valid {
+		data.SocieteLink = societeLink.String
+	}
+	if societeDiffusion.Valid {
+		data.SocieteDiffusion = societeDiffusion.Bool
+	}
+
+	return data, true, nil
+}
+
 func NewProvider(db *sql.DB, revalidationAPIURL string) scrapemate.JobProvider {
 	prov := provider{
 		db:                 db,
@@ -69,24 +165,23 @@ func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (an
     log := scrapemate.GetLoggerFromContext(ctx)
     log.Info(fmt.Sprintf("jobWrapper.Process: Processing job %s (type: %T)", w.IJob.GetID(), w.IJob))
     
+    ctx = context.WithValue(ctx, providerKey{}, w.provider)
+    ctx = context.WithValue(ctx, gmaps.CompanyDataCheckerKey{}, w.provider)
+    
     data, nextJobs, err := w.IJob.Process(ctx, resp)
     
     if err == nil {
-        var wrappedNextJobs []scrapemate.IJob
+        _, isCompanyJob := w.IJob.(*gmaps.CompanyJob)
+        
         if len(nextJobs) > 0 {
-            log.Info(fmt.Sprintf("jobWrapper.Process: Pushing %d child jobs for job %s", len(nextJobs), w.IJob.GetID()))
-            for i, job := range nextJobs {
-                log.Info(fmt.Sprintf("  Child job %d: type=%T, URL=%s", i, job, job.GetURL()))
+            if isCompanyJob {
+                w.provider.pushChildJobsAsync(ctx, w.IJob, nextJobs)
+            } else {
+                if err := w.provider.pushChildJobs(ctx, w.IJob, nextJobs); err != nil {
+                    log.Error(fmt.Sprintf("jobWrapper.Process: Error pushing child jobs: %v", err))
+                    return data, nextJobs, fmt.Errorf("while pushing jobs: %w", err)
+                }
             }
-            if err := w.provider.pushChildJobs(ctx, w.IJob, nextJobs); err != nil {
-                log.Error(fmt.Sprintf("jobWrapper.Process: Error pushing child jobs: %v", err))
-                return data, nextJobs, fmt.Errorf("while pushing jobs: %w", err)
-            }
-            wrappedNextJobs = make([]scrapemate.IJob, len(nextJobs))
-            for i := range nextJobs {
-                wrappedNextJobs[i] = &jobWrapper{IJob: nextJobs[i], provider: w.provider}
-            }
-            log.Info(fmt.Sprintf("jobWrapper.Process: Successfully pushed %d child jobs", len(nextJobs)))
         }
         
         if err := w.provider.markJobDone(ctx, w.IJob, len(nextJobs)); err != nil {
@@ -95,6 +190,18 @@ func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (an
         
         if gmapJob, ok := w.IJob.(*gmaps.GmapJob); ok {
             w.provider.callRevalidationAPI(ctx, gmapJob.OwnerID)
+        }
+        
+        if isCompanyJob {
+            return data, nil, err
+        }
+        
+        var wrappedNextJobs []scrapemate.IJob
+        if len(nextJobs) > 0 {
+            wrappedNextJobs = make([]scrapemate.IJob, len(nextJobs))
+            for i := range nextJobs {
+                wrappedNextJobs[i] = &jobWrapper{IJob: nextJobs[i], provider: w.provider}
+            }
         }
         
         return data, wrappedNextJobs, err
@@ -129,6 +236,19 @@ func (p *provider) pushChildJobs(ctx context.Context, parentJob scrapemate.IJob,
     }
     
     return tx.Commit()
+}
+
+func (p *provider) pushChildJobsAsync(ctx context.Context, parentJob scrapemate.IJob, childJobs []scrapemate.IJob) {
+    if len(childJobs) == 0 {
+        return
+    }
+    
+    go func() {
+        if err := p.pushChildJobs(context.Background(), parentJob, childJobs); err != nil {
+            log := scrapemate.GetLoggerFromContext(ctx)
+            log.Error(fmt.Sprintf("Error pushing child jobs asynchronously: %v", err))
+        }
+    }()
 }
 
 func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrapemate.IJob, parentID string) error {
@@ -183,7 +303,7 @@ func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrape
             "owner_id": j.OwnerID,
             "organization_id": j.OrganizationID,
         }
-    case *gmaps.BodaccJob:
+    case *gmaps.CompanyJob:
         jsonJob.JobType = "bodacc"
         jsonJob.Metadata = map[string]interface{}{
             "company_name":     j.CompanyName,
@@ -286,6 +406,7 @@ func (p *provider) checkAndMarkParentDone(ctx context.Context, tx *sql.Tx, jobID
     return nil
 }
 
+
 func (p *provider) callRevalidationAPI(ctx context.Context, userID string) {
 	if p.revalidationAPIURL == "" || userID == "" {
 		log := scrapemate.GetLoggerFromContext(ctx)
@@ -320,7 +441,7 @@ func (p *provider) callRevalidationAPI(ctx context.Context, userID string) {
 	}
 	defer resp.Body.Close()
 
-	log.Info(fmt.Sprintf("Revalidation API response: %v", resp))
+	log.Info(fmt.Sprintf("Revalidation API response successful"))
 }
 
 func (p *provider) MarkFailed(ctx context.Context, job scrapemate.IJob) error {
@@ -407,7 +528,6 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
         actualJob = wrapper.IJob
     }
 
-    log.Info(fmt.Sprintf("Push: job type=%T, URL=%s", actualJob, actualJob.GetURL()))
 
     jsonJob := &JSONJob{
         ID:         actualJob.GetID(),
@@ -455,7 +575,7 @@ func (p *provider) Push(ctx context.Context, job scrapemate.IJob) error {
             "owner_id": j.OwnerID,
             "organization_id": j.OrganizationID,
         }
-    case *gmaps.BodaccJob:
+    case *gmaps.CompanyJob:
         if j.ParentID != "" {
             parentID = &j.ParentID
         }
@@ -795,7 +915,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             parentID = *jsonJob.ParentID
         }
 
-        bodaccJob := &gmaps.BodaccJob{
+        CompanyJob := &gmaps.CompanyJob{
             Job: scrapemate.Job{
                 ID:         jsonJob.ID,
                 ParentID:   parentID,
@@ -811,7 +931,7 @@ func decodeJob(payloadType string, payload []byte) (scrapemate.IJob, error) {
             Entry:           &entry,
         }
 
-        return bodaccJob, nil
+        return CompanyJob, nil
     case "pappers":
         ownerID, ok := jsonJob.Metadata["owner_id"].(string)
         if !ok {
