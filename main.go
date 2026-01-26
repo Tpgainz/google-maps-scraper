@@ -11,10 +11,6 @@ import (
 
 	"github.com/gosom/google-maps-scraper/runner"
 	"github.com/gosom/google-maps-scraper/runner/databaserunner"
-	"github.com/gosom/google-maps-scraper/runner/filerunner"
-	"github.com/gosom/google-maps-scraper/runner/installplaywright"
-	"github.com/gosom/google-maps-scraper/runner/lambdaaws"
-	"github.com/gosom/google-maps-scraper/runner/webrunner"
 	"github.com/joho/godotenv"
 )
 
@@ -47,8 +43,6 @@ func main() {
 		cancel()
 		os.Stderr.WriteString(err.Error() + "\n")
 
-		runner.Telemetry().Close()
-
 		os.Exit(1)
 	}
 
@@ -56,7 +50,6 @@ func main() {
 		os.Stderr.WriteString(err.Error() + "\n")
 
 		_ = runnerInstance.Close(ctx)
-		runner.Telemetry().Close()
 
 		cancel()
 
@@ -64,7 +57,6 @@ func main() {
 	}
 
 	_ = runnerInstance.Close(ctx)
-	runner.Telemetry().Close()
 
 	cancel()
 
@@ -73,18 +65,8 @@ func main() {
 
 func runnerFactory(cfg *runner.Config) (runner.Runner, error) {
 	switch cfg.RunMode {
-	case runner.RunModeFile:
-		return filerunner.New(cfg)
 	case runner.RunModeDatabase, runner.RunModeDatabaseProduce:
 		return databaserunner.New(cfg)
-	case runner.RunModeInstallPlaywright:
-		return installplaywright.New(cfg)
-	case runner.RunModeWeb:
-		return webrunner.New(cfg)
-	case runner.RunModeAwsLambda:
-		return lambdaaws.New(cfg)
-	case runner.RunModeAwsLambdaInvoker:
-		return lambdaaws.NewInvoker(cfg)
 	default:
 		return nil, fmt.Errorf("%w: %d", runner.ErrInvalidRunMode, cfg.RunMode)
 	}

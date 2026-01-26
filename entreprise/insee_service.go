@@ -101,21 +101,6 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 		}
 		
 		score := scoreResult(etab, companyName, address)
-		if score > 100 {
-			var etabName, etabAddress string
-			enseignes := findEnseignes(etab)
-			if ul, ok := etab["uniteLegale"].(map[string]interface{}); ok {
-				if denomination, ok := ul["denominationUniteLegale"].(string); ok {
-					etabName = denomination
-				}
-			}
-			if adresse, ok := etab["adresseEtablissement"].(map[string]interface{}); ok {
-				if libelle, ok := adresse["libelleVoieEtablissement"].(string); ok {
-					etabAddress = libelle
-				}
-			}
-			log.Printf("INSEE establishment: etab name: %s, etab address: %s, score: %f, source: %s, enseignes: %v, searchName: %s", etabName, etabAddress, score, source, enseignes, companyName)
-		}
 		allResults = append(allResults, ScoredResult{
 			Etablissement: etab,
 			Score:         score,

@@ -5,30 +5,18 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
-
-	"github.com/gosom/google-maps-scraper/s3uploader"
-	"github.com/gosom/google-maps-scraper/tlmt"
-	"github.com/gosom/google-maps-scraper/tlmt/gonoop"
-	"github.com/gosom/google-maps-scraper/tlmt/goposthog"
 )
 
 const (
-	RunModeFile = iota + 1
-	RunModeDatabase
+	RunModeDatabase = iota + 1
 	RunModeDatabaseProduce
-	RunModeInstallPlaywright
-	RunModeWeb
-	RunModeAwsLambda
-	RunModeAwsLambdaInvoker
 )
 
 var (
@@ -40,121 +28,58 @@ type Runner interface {
 	Close(context.Context) error
 }
 
-type S3Uploader interface {
-	Upload(ctx context.Context, bucketName, key string, body io.Reader) error
-}
 
 type Config struct {
 	Concurrency              int
-	CacheDir                 string
 	MaxDepth                 int
 	InputFile                string
-	ResultsFile              string
-	JSON                     bool
 	LangCode                 string
 	Debug                    bool
 	Dsn                      string
 	ProduceOnly              bool
 	ExitOnInactivityDuration time.Duration
 	Email                    bool
-    Bodacc                   bool
-	CustomWriter             string
+	Bodacc                   bool
 	GeoCoordinates           string
 	Zoom                     int
 	RunMode                  int
-	DisableTelemetry         bool
-	WebRunner                bool
-	AwsLamdbaRunner          bool
-	DataFolder               string
 	Proxies                  []string
-	AwsAccessKey             string
-	AwsSecretKey             string
-	AwsRegion                string
-	S3Uploader               S3Uploader
-	S3Bucket                 string
-	AwsLambdaInvoker         bool
-	FunctionName             string
-	AwsLambdaChunkSize       int
 	FastMode                 bool
 	Radius                   float64
-	Addr                     string
 	DisablePageReuse         bool
 	ExtraReviews             bool
 	RevalidationAPIURL       string
+	JobCompletionAPIURL      string
 }
 
 func ParseConfig() *Config {
 	cfg := Config{}
-
-	if os.Getenv("PLAYWRIGHT_INSTALL_ONLY") == "1" {
-		cfg.RunMode = RunModeInstallPlaywright
-
-		return &cfg
-	}
 
 	var (
 		proxies string
 	)
 
 	flag.IntVar(&cfg.Concurrency, "c", min(runtime.NumCPU()/2, 1), "sets the concurrency [default: half of CPU cores]")
-	flag.StringVar(&cfg.CacheDir, "cache", "cache", "sets the cache directory [no effect at the moment]")
 	flag.IntVar(&cfg.MaxDepth, "depth", 10, "maximum scroll depth in search results [default: 10]")
-	flag.StringVar(&cfg.ResultsFile, "results", "stdout", "path to the results file [default: stdout]")
 	flag.StringVar(&cfg.InputFile, "input", "", "path to the input file with queries (one per line) [default: empty]")
 	flag.StringVar(&cfg.LangCode, "lang", "en", "language code for Google (e.g., 'de' for German) [default: en]")
 	flag.BoolVar(&cfg.Debug, "debug", false, "enable headful crawl (opens browser window) [default: false]")
-	flag.StringVar(&cfg.Dsn, "dsn", "", "database connection string [only valid with database provider]")
+	flag.StringVar(&cfg.Dsn, "dsn", "", "database connection string [required]")
 	flag.BoolVar(&cfg.ProduceOnly, "produce", false, "produce seed jobs only (requires dsn)")
 	flag.DurationVar(&cfg.ExitOnInactivityDuration, "exit-on-inactivity", 0, "exit after inactivity duration (e.g., '5m')")
-	flag.BoolVar(&cfg.JSON, "json", false, "produce JSON output instead of CSV")
 	flag.BoolVar(&cfg.Email, "email", false, "extract emails from websites")
-    flag.BoolVar(&cfg.Bodacc, "bodacc", false, "extract BODACC company info")
-	flag.StringVar(&cfg.CustomWriter, "writer", "", "use custom writer plugin (format: 'dir:pluginName')")
+	flag.BoolVar(&cfg.Bodacc, "bodacc", false, "extract BODACC company info")
 	flag.StringVar(&cfg.GeoCoordinates, "geo", "", "set geo coordinates for search (e.g., '37.7749,-122.4194')")
 	flag.IntVar(&cfg.Zoom, "zoom", 15, "set zoom level (0-21) for search")
-	flag.BoolVar(&cfg.WebRunner, "web", false, "run web server instead of crawling")
-	flag.StringVar(&cfg.DataFolder, "data-folder", "webdata", "data folder for web runner")
 	flag.StringVar(&proxies, "proxies", "", "comma separated list of proxies to use in the format protocol://user:pass@host:port example: socks5://localhost:9050 or http://user:pass@localhost:9050")
-	flag.BoolVar(&cfg.AwsLamdbaRunner, "aws-lambda", false, "run as AWS Lambda function")
-	flag.BoolVar(&cfg.AwsLambdaInvoker, "aws-lambda-invoker", false, "run as AWS Lambda invoker")
-	flag.StringVar(&cfg.FunctionName, "function-name", "", "AWS Lambda function name")
-	flag.StringVar(&cfg.AwsAccessKey, "aws-access-key", "", "AWS access key")
-	flag.StringVar(&cfg.AwsSecretKey, "aws-secret-key", "", "AWS secret key")
-	flag.StringVar(&cfg.AwsRegion, "aws-region", "", "AWS region")
-	flag.StringVar(&cfg.S3Bucket, "s3-bucket", "", "S3 bucket name")
-	flag.IntVar(&cfg.AwsLambdaChunkSize, "aws-lambda-chunk-size", 100, "AWS Lambda chunk size")
 	flag.BoolVar(&cfg.FastMode, "fast-mode", false, "fast mode (reduced data collection)")
 	flag.Float64Var(&cfg.Radius, "radius", 10000, "search radius in meters. Default is 10000 meters")
-	flag.StringVar(&cfg.Addr, "addr", ":8080", "address to listen on for web server")
 	flag.BoolVar(&cfg.DisablePageReuse, "disable-page-reuse", false, "disable page reuse in playwright")
 	flag.BoolVar(&cfg.ExtraReviews, "extra-reviews", false, "enable extra reviews collection")
 	flag.StringVar(&cfg.RevalidationAPIURL, "revalidation-api", "", "URL for frontend cache revalidation API")
+	flag.StringVar(&cfg.JobCompletionAPIURL, "job-completion-api", "", "URL for frontend job completion notification API")
 
 	flag.Parse()
-
-	if cfg.AwsAccessKey == "" {
-		cfg.AwsAccessKey = os.Getenv("MY_AWS_ACCESS_KEY")
-	}
-
-	if cfg.AwsSecretKey == "" {
-		cfg.AwsSecretKey = os.Getenv("MY_AWS_SECRET_KEY")
-	}
-
-	if cfg.AwsRegion == "" {
-		cfg.AwsRegion = os.Getenv("MY_AWS_REGION")
-	}
-
-	if cfg.AwsLambdaInvoker && cfg.FunctionName == "" {
-		panic("FunctionName must be provided when using AwsLambdaInvoker")
-	}
-
-	if cfg.AwsLambdaInvoker && cfg.S3Bucket == "" {
-		panic("S3Bucket must be provided when using AwsLambdaInvoker")
-	}
-
-	if cfg.AwsLambdaInvoker && cfg.InputFile == "" {
-		panic("InputFile must be provided when using AwsLambdaInvoker")
-	}
 
 	if cfg.Concurrency < 1 {
 		panic("Concurrency must be greater than 0")
@@ -168,6 +93,10 @@ func ParseConfig() *Config {
 		panic("Zoom must be between 0 and 21")
 	}
 
+	if cfg.Dsn == "" {
+		panic("Dsn must be provided")
+	}
+
 	if cfg.Dsn == "" && cfg.ProduceOnly {
 		panic("Dsn must be provided when using ProduceOnly")
 	}
@@ -176,58 +105,13 @@ func ParseConfig() *Config {
 		cfg.Proxies = strings.Split(proxies, ",")
 	}
 
-	if cfg.AwsAccessKey != "" && cfg.AwsSecretKey != "" && cfg.AwsRegion != "" {
-		cfg.S3Uploader = s3uploader.New(cfg.AwsAccessKey, cfg.AwsSecretKey, cfg.AwsRegion)
-	}
-
-	switch {
-	case cfg.AwsLambdaInvoker:
-		cfg.RunMode = RunModeAwsLambdaInvoker
-	case cfg.AwsLamdbaRunner:
-		cfg.RunMode = RunModeAwsLambda
-	case cfg.WebRunner || (cfg.Dsn == "" && cfg.InputFile == ""):
-		cfg.RunMode = RunModeWeb
-	case cfg.Dsn == "":
-		cfg.RunMode = RunModeFile
-	case cfg.ProduceOnly:
+	if cfg.ProduceOnly {
 		cfg.RunMode = RunModeDatabaseProduce
-	case cfg.Dsn != "":
+	} else {
 		cfg.RunMode = RunModeDatabase
-	default:
-		panic("Invalid configuration")
 	}
 
 	return &cfg
-}
-
-var (
-	telemetryOnce sync.Once
-	telemetry     tlmt.Telemetry
-)
-
-func Telemetry() tlmt.Telemetry {
-	telemetryOnce.Do(func() {
-		disableTel := func() bool {
-			return os.Getenv("DISABLE_TELEMETRY") == "1"
-		}()
-
-		if disableTel {
-			telemetry = gonoop.New()
-
-			return
-		}
-
-		val, err := goposthog.New("phc_CHYBGEd1eJZzDE7ZWhyiSFuXa9KMLRnaYN47aoIAY2A", "https://eu.i.posthog.com")
-		if err != nil || val == nil {
-			telemetry = gonoop.New()
-
-			return
-		}
-
-		telemetry = val
-	})
-
-	return telemetry
 }
 
 func wrapText(text string, width int) []string {
