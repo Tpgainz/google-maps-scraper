@@ -37,9 +37,15 @@ func (s *StatusManager) MarkDone(ctx context.Context, job scrapemate.IJob, child
 			return err
 		}
 
+		// Check if this is a ROOT job (no parent) with no children
+		// Only call completion API for root jobs that have completed entirely
 		var parentID sql.NullString
-		err = tx.QueryRowContext(ctx, `SELECT parent_id FROM gmaps_jobs WHERE id = $1`, job.GetID()).Scan(&parentID)
-		if err == nil && !parentID.Valid {
+		var childCount int
+		err = tx.QueryRowContext(ctx,
+			`SELECT parent_id, child_jobs_count FROM gmaps_jobs WHERE id = $1`,
+			job.GetID()).Scan(&parentID, &childCount)
+		if err == nil && !parentID.Valid && childCount == 0 {
+			// This is a root job with no children - call completion API
 			var payload []byte
 			err = tx.QueryRowContext(ctx, `SELECT payload FROM gmaps_jobs WHERE id = $1`, job.GetID()).Scan(&payload)
 			if err == nil {
@@ -141,16 +147,22 @@ func (s *StatusManager) checkAndMarkParentDone(ctx context.Context, tx *sql.Tx, 
 			return err
 		}
 
+		// Check if the parent that just completed is a ROOT job (no grandparent)
+		// Only call completion API once when the ROOT job finishes
 		var grandParentID sql.NullString
 		err = tx.QueryRowContext(ctx, `SELECT parent_id FROM gmaps_jobs WHERE id = $1`, parentID.String).Scan(&grandParentID)
 		if err == nil && !grandParentID.Valid {
+			// parentID is the ROOT job - all children completed, call completion API
 			var payload []byte
 			err = tx.QueryRowContext(ctx, `SELECT payload FROM gmaps_jobs WHERE id = $1`, parentID.String).Scan(&payload)
 			if err == nil {
 				s.apiClient.CallJobCompletionAPIAsync(ctx, parentID.String, payload)
 			}
+			// No need to recurse - we've reached the root
+			return nil
 		}
 
+		// Continue up the hierarchy
 		return s.checkAndMarkParentDone(ctx, tx, parentID.String)
 	}
 

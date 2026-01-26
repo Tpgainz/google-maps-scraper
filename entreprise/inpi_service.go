@@ -290,15 +290,13 @@ func (s *INPIService) SearchCompany(companyName, address string) (*SearchResult,
 	searchNameLower := strings.ToLower(normalizedSearch)
 	parsedAddress := parseAddress(address)
 	
-	for i, formality := range formalities {
+	for _, formality := range formalities {
 		inpiCompany := s.parseFormalityToCompanyResponse(&formality)
 		companyInfo := s.transformINPIResponseToCompanyInfo(inpiCompany, address)
 		
 		matchScore := s.calculateMatchScore(searchNameLower, inpiCompany, address, parsedAddress)
 		companyInfo.MatchScore = matchScore
 		
-		log.Printf("Parsed formality %d: SIREN=%s, CompanyName=%s, PostalCode=%s, Directors=%v, MatchScore=%.2f", 
-			i+1, companyInfo.SocieteSiren, companyInfo.SocieteNom, inpiCompany.PostalCode, companyInfo.SocieteDirigeants, matchScore)
 		
 		results = append(results, companyInfo)
 	}

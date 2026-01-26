@@ -109,10 +109,6 @@ func (r *resultWriter) getRootParentJobID(ctx context.Context, jobID string) (st
 	}
 }
 
-func (r *resultWriter) incrementParentFailedCounter(ctx context.Context, parentID string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE gmaps_jobs SET child_jobs_failed = child_jobs_failed + 1 WHERE id = $1`, parentID)
-	return err
-}
 
 func (r *resultWriter) notifyRevalidation(ctx context.Context, entries []dbEntry) {
 	if r.apiClient.GetRevalidationURL() == "" {
@@ -247,6 +243,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			}
 
 			if isDuplicate {
+				// Update existing record with any new data (emails, company info, etc.)
 				_ = r.updateExistingIfEmpty(ctx, dbEntry{
 					UserID:            userID,
 					OrganizationID:    organizationID,
@@ -262,11 +259,13 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 					SocieteDiffusion:  entry.SocieteDiffusion,
 				})
 
-				var directParentID string
+				// MarkDone() already incremented child_jobs_completed, but this is a duplicate.
+				// We need to correct the counters: decrement completed, increment failed.
+				// This way the parent knows how many results were actually new vs duplicates.
 				if actualJob != nil {
-					directParentID, _ = r.getParentJobID(ctx, actualJob.GetID())
+					directParentID, _ := r.getParentJobID(ctx, actualJob.GetID())
 					if directParentID != "" {
-						_ = r.incrementParentFailedCounter(ctx, directParentID)
+						_ = r.adjustCountersForDuplicate(ctx, directParentID)
 					}
 				}
 
@@ -437,6 +436,18 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 	r.notifyRevalidation(ctx, entries)
 
 	return nil
+}
+
+// adjustCountersForDuplicate corrects the job counters when a duplicate is detected.
+// Since MarkDone() already incremented child_jobs_completed before we detect the duplicate,
+// we need to decrement completed and increment failed to reflect that this was not a new result.
+func (r *resultWriter) adjustCountersForDuplicate(ctx context.Context, parentID string) error {
+	q := `UPDATE gmaps_jobs
+		SET child_jobs_completed = GREATEST(child_jobs_completed - 1, 0),
+		    child_jobs_failed = child_jobs_failed + 1
+		WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, q, parentID)
+	return err
 }
 
 func (r *resultWriter) updateExistingIfEmpty(ctx context.Context, e dbEntry) error {
