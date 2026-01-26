@@ -12,7 +12,6 @@ import (
 
 	"github.com/gosom/google-maps-scraper/postgres"
 	"github.com/gosom/google-maps-scraper/runner"
-	"github.com/gosom/google-maps-scraper/tlmt"
 	"github.com/gosom/scrapemate"
 	"github.com/gosom/scrapemate/scrapemateapp"
 )
@@ -37,7 +36,7 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 
 	ans := dbrunner{
 		cfg:      cfg,
-		provider: postgres.NewProvider(conn, cfg.RevalidationAPIURL),
+		provider: postgres.NewProvider(conn, cfg.RevalidationAPIURL, cfg.JobCompletionAPIURL),
 		produce:  cfg.ProduceOnly,
 		conn:     conn,
 	}
@@ -80,7 +79,6 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 
 	if !cfg.DisablePageReuse {
 		opts = append(opts,
-			scrapemateapp.WithPageReuseLimit(2),
 			scrapemateapp.WithPageReuseLimit(200),
 		)
 	}
@@ -102,8 +100,6 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 }
 
 func (d *dbrunner) Run(ctx context.Context) error {
-	_ = runner.Telemetry().Send(ctx, tlmt.NewEvent("databaserunner.Run", nil))
-
 	if d.produce {
 		return d.produceSeedJobs(ctx)
 	}
@@ -163,10 +159,6 @@ func (d *dbrunner) produceSeedJobs(ctx context.Context) error {
 			return err
 		}
 	}
-
-	_ = runner.Telemetry().Send(ctx, tlmt.NewEvent("databaserunner.produceSeedJobs", map[string]any{
-		"job_count": len(jobs),
-	}))
 
 	return nil
 }

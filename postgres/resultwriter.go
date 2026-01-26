@@ -1,12 +1,9 @@
 package postgres
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -16,66 +13,48 @@ import (
 )
 
 type dbEntry struct {
-	UserID              string
-	OrganizationID      string
-	ParentID            string
-	Link                string
-	PayloadType         string
-	Title               string
-	Category            string
-	Address             string
-	Website             string
-	Phone               string
-	Emails              []string
-	Latitude            float64
-	Longitude           float64
-	SocieteDirigeants   string
-	SocieteSiren        string
-	SocieteForme        string
-	SocieteEffectif     string
-	SocieteCreation     string
-	SocieteCloture      string
-	SocieteLink         string
-	SocieteDiffusion    bool
+	UserID            string
+	OrganizationID    string
+	ParentID          string
+	Link              string
+	PayloadType       string
+	Title             string
+	Category          string
+	Address           string
+	Website           string
+	Phone             string
+	Emails            []string
+	Latitude          float64
+	Longitude         float64
+	SocieteDirigeants string
+	SocieteSiren      string
+	SocieteForme      string
+	SocieteEffectif   string
+	SocieteCreation   string
+	SocieteCloture    string
+	SocieteLink       string
+	SocieteDiffusion  bool
 }
 
+// NewResultWriter creates a new ResultWriter backed by PostgreSQL.
 func NewResultWriter(db *sql.DB, revalidationAPIURL string) scrapemate.ResultWriter {
 	return &resultWriter{
-		db:                 db,
-		revalidationAPIURL: revalidationAPIURL,
-		httpClient:         &http.Client{Timeout: 10 * time.Second},
-        inMemoryIndex:      make(map[string]int),
+		db:            db,
+		apiClient:     NewAPIClient(revalidationAPIURL, ""),
+		inMemoryIndex: make(map[string]int),
 	}
 }
 
 type resultWriter struct {
-	db                 *sql.DB
-	revalidationAPIURL string
-	httpClient         *http.Client
-    inMemoryIndex      map[string]int
+	db            *sql.DB
+	apiClient     *APIClient
+	inMemoryIndex map[string]int
 }
 
 func (r *resultWriter) checkDuplicateURL(ctx context.Context, url, userID, organizationID string) (bool, error) {
-	if url == "" {
-		return false, nil
-	}
-
-	var q string
-	var args []interface{}
-
-	if userID != "" && organizationID != "" {
-		q = `SELECT COUNT(*) FROM results 
-		WHERE link = $1 AND (user_id = $2 OR organization_id = $3)`
-		args = []interface{}{url, userID, organizationID}
-	} else if userID != "" {
-		q = `SELECT COUNT(*) FROM results 
-		WHERE link = $1 AND user_id = $2`
-		args = []interface{}{url, userID}
-	} else if organizationID != "" {
-		q = `SELECT COUNT(*) FROM results 
-		WHERE link = $1 AND organization_id = $2`
-		args = []interface{}{url, organizationID}
-	} else {
+	query := NewDuplicateURLQuery(url, userID, organizationID)
+	q, args, ok := query.Build()
+	if !ok {
 		return false, nil
 	}
 
@@ -92,85 +71,53 @@ func (r *resultWriter) getParentJobID(ctx context.Context, jobID string) (string
 	var parentID sql.NullString
 	q := `SELECT parent_id FROM gmaps_jobs WHERE id = $1`
 	err := r.db.QueryRowContext(ctx, q, jobID).Scan(&parentID)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to get parent job ID: %w", err)
 	}
-	
+
 	if parentID.Valid {
 		return parentID.String, nil
 	}
-	
+
 	return "", nil
 }
 
 func (r *resultWriter) getRootParentJobID(ctx context.Context, jobID string) (string, error) {
 	currentJobID := jobID
 	visitedJobs := make(map[string]bool)
-	
+
 	for {
 		if visitedJobs[currentJobID] {
 			return "", fmt.Errorf("circular reference detected in job hierarchy")
 		}
 		visitedJobs[currentJobID] = true
-		
+
 		parentID, err := r.getParentJobID(ctx, currentJobID)
 		if err != nil {
 			return "", err
 		}
-		
+
 		if parentID == "" {
 			return currentJobID, nil
 		}
-		
+
 		currentJobID = parentID
 	}
 }
 
-func (r *resultWriter) callRevalidationAPI(ctx context.Context, userID string) {
-	if r.revalidationAPIURL == "" || userID == "" {
-		log := scrapemate.GetLoggerFromContext(ctx)
-		if r.revalidationAPIURL == "" {
-			log.Info(fmt.Sprintf("Skipping revalidation API call: revalidationAPIURL is empty (userID=%s)", userID))
-		}
-		if userID == "" {
-			log.Info(fmt.Sprintf("Skipping revalidation API call: userID is empty (revalidationAPIURL=%s)", r.revalidationAPIURL))
-		}
-		return
-	}
-
-	payload := map[string]string{"userId": userID}
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", r.revalidationAPIURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	log := scrapemate.GetLoggerFromContext(ctx)
-	log.Info(fmt.Sprintf("Calling revalidation API: %s", r.revalidationAPIURL))
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	log.Info(fmt.Sprintf("Revalidation API call successful"))
+func (r *resultWriter) incrementParentFailedCounter(ctx context.Context, parentID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE gmaps_jobs SET child_jobs_failed = child_jobs_failed + 1 WHERE id = $1`, parentID)
+	return err
 }
 
 func (r *resultWriter) notifyRevalidation(ctx context.Context, entries []dbEntry) {
-	if r.revalidationAPIURL == "" {
+	if r.apiClient.GetRevalidationURL() == "" {
 		log := scrapemate.GetLoggerFromContext(ctx)
-		log.Info(fmt.Sprintf("Skipping revalidation API call: revalidationAPIURL is empty (entries=%v)", entries))
+		log.Info(fmt.Sprintf("Skipping revalidation API call: revalidationURL is empty (entries=%v)", entries))
 		return
 	}
 
@@ -184,7 +131,7 @@ func (r *resultWriter) notifyRevalidation(ctx context.Context, entries []dbEntry
 
 	// Call revalidation API for each unique user ID
 	for userID := range userIDs {
-		go r.callRevalidationAPI(ctx, userID)
+		go r.apiClient.CallRevalidationAPI(ctx, userID)
 	}
 }
 
@@ -208,16 +155,14 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				return nil
 			}
 
-
 			entry, ok := result.Data.(*gmaps.Entry)
 			if !ok || entry == nil {
 				log.Info(fmt.Sprintf("Skipping non-entry result (job=%T, data=%T)", result.Job, result.Data))
 				continue
 			}
 
-
 			payloadType := "place"
-			
+
 			if result.Job != nil {
 				switch result.Job.(type) {
 				case *gmaps.GmapJob:
@@ -241,7 +186,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			if job, ok := actualJob.(*gmaps.GmapJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
-				
+
 				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
 				if err != nil {
 					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
@@ -252,7 +197,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			} else if job, ok := actualJob.(*gmaps.PlaceJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
-				
+
 				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
 				if err != nil {
 					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
@@ -263,7 +208,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			} else if job, ok := actualJob.(*gmaps.EmailExtractJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
-				
+
 				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
 				if err != nil {
 					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
@@ -274,7 +219,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			} else if job, ok := actualJob.(*gmaps.CompanyJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
-				
+
 				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
 				if err != nil {
 					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
@@ -285,7 +230,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			} else if job, ok := actualJob.(*gmaps.PappersJob); ok {
 				userID = job.OwnerID
 				organizationID = job.OrganizationID
-				
+
 				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
 				if err != nil {
 					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
@@ -316,31 +261,40 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 					SocieteLink:       entry.SocieteLink,
 					SocieteDiffusion:  entry.SocieteDiffusion,
 				})
+
+				var directParentID string
+				if actualJob != nil {
+					directParentID, _ = r.getParentJobID(ctx, actualJob.GetID())
+					if directParentID != "" {
+						_ = r.incrementParentFailedCounter(ctx, directParentID)
+					}
+				}
+
 				continue
 			}
 
 			dbEntry := dbEntry{
-				UserID:              userID,
-				OrganizationID:      organizationID,
-				ParentID:            parentJobID,
-				Link:                entry.Link,
-				PayloadType:         payloadType,
-				Title:               entry.Title,
-				Category:            entry.Category,
-				Address:             entry.Address,
-				Website:             entry.WebSite,
-				Phone:               entry.Phone,
-				Emails:              entry.Emails,
-				Latitude:            entry.Latitude,
-				Longitude:           entry.Longtitude,
-				SocieteDirigeants:   strings.Join(entry.SocieteDirigeants, ","),
-				SocieteSiren:        entry.SocieteSiren,
-				SocieteForme:        entry.SocieteForme,
-				SocieteEffectif:     "",
-				SocieteCreation:     entry.SocieteCreation,
-				SocieteCloture:      entry.SocieteCloture,
-				SocieteLink:         entry.SocieteLink,
-				SocieteDiffusion:    entry.SocieteDiffusion,
+				UserID:            userID,
+				OrganizationID:    organizationID,
+				ParentID:          parentJobID,
+				Link:              entry.Link,
+				PayloadType:       payloadType,
+				Title:             entry.Title,
+				Category:          entry.Category,
+				Address:           entry.Address,
+				Website:           entry.WebSite,
+				Phone:             entry.Phone,
+				Emails:            entry.Emails,
+				Latitude:          entry.Latitude,
+				Longitude:         entry.Longtitude,
+				SocieteDirigeants: strings.Join(entry.SocieteDirigeants, ","),
+				SocieteSiren:      entry.SocieteSiren,
+				SocieteForme:      entry.SocieteForme,
+				SocieteEffectif:   "",
+				SocieteCreation:   entry.SocieteCreation,
+				SocieteCloture:    entry.SocieteCloture,
+				SocieteLink:       entry.SocieteLink,
+				SocieteDiffusion:  entry.SocieteDiffusion,
 			}
 
 			key := userID + "|" + organizationID + "|" + entry.Link
@@ -410,26 +364,26 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 }
 
 func mergeUnique(a, b []string) []string {
-    if len(b) == 0 {
-        return a
-    }
-    seen := make(map[string]struct{}, len(a)+len(b))
-    out := make([]string, 0, len(a)+len(b))
-    for _, s := range a {
-        if _, ok := seen[s]; ok {
-            continue
-        }
-        seen[s] = struct{}{}
-        out = append(out, s)
-    }
-    for _, s := range b {
-        if _, ok := seen[s]; ok {
-            continue
-        }
-        seen[s] = struct{}{}
-        out = append(out, s)
-    }
-    return out
+	if len(b) == 0 {
+		return a
+	}
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, s := range a {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	for _, s := range b {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
 }
 
 func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
@@ -448,12 +402,12 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO results (
-			parent_id, user_id, organization_id, link, payload_type, 
+			parent_id, user_id, organization_id, link, payload_type,
 			title, category, address, website, phone, emails, latitude, longitude,
-			societe_dirigeants, societe_siren, societe_forme, 
+			societe_dirigeants, societe_siren, societe_forme,
 			societe_effectif, societe_creation, societe_cloture, societe_link, societe_diffusion
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
 			$13, $14, $15, $16, $17, $18, $19, $20, $21
 		)`)
 	if err != nil {
@@ -478,45 +432,45 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 	}
 
 	log.Info(fmt.Sprintf("Successfully saved %d entries", len(entries)))
-	
+
 	// Call revalidation API for unique user IDs
 	r.notifyRevalidation(ctx, entries)
-	
+
 	return nil
 }
 
 func (r *resultWriter) updateExistingIfEmpty(ctx context.Context, e dbEntry) error {
-    if e.Link == "" || (e.UserID == "" && e.OrganizationID == "") {
-        return nil
-    }
+	if e.Link == "" || (e.UserID == "" && e.OrganizationID == "") {
+		return nil
+	}
 
-    var idCond string
-    var args []interface{}
-    if e.UserID != "" && e.OrganizationID != "" {
-        idCond = "(user_id = $2 OR organization_id = $3)"
-        args = []interface{}{e.Link, e.UserID, e.OrganizationID}
-    } else if e.UserID != "" {
-        idCond = "user_id = $2"
-        args = []interface{}{e.Link, e.UserID}
-    } else {
-        idCond = "organization_id = $2"
-        args = []interface{}{e.Link, e.OrganizationID}
-    }
+	var idCond string
+	var args []interface{}
+	if e.UserID != "" && e.OrganizationID != "" {
+		idCond = "(user_id = $2 OR organization_id = $3)"
+		args = []interface{}{e.Link, e.UserID, e.OrganizationID}
+	} else if e.UserID != "" {
+		idCond = "user_id = $2"
+		args = []interface{}{e.Link, e.UserID}
+	} else {
+		idCond = "organization_id = $2"
+		args = []interface{}{e.Link, e.OrganizationID}
+	}
 
-    q := `UPDATE results SET
-        website = CASE WHEN (website IS NULL OR website = '') AND $4 <> '' THEN $4 ELSE website END,
-        phone = CASE WHEN (phone IS NULL OR phone = '') AND $5 <> '' THEN $5 ELSE phone END,
-        societe_dirigeants = CASE WHEN (societe_dirigeants IS NULL OR societe_dirigeants = '') AND $6 <> '' THEN $6 ELSE societe_dirigeants END,
-        societe_siren = CASE WHEN (societe_siren IS NULL OR societe_siren = '') AND $7 <> '' THEN $7 ELSE societe_siren END,
-        societe_forme = CASE WHEN (societe_forme IS NULL OR societe_forme = '') AND $8 <> '' THEN $8 ELSE societe_forme END,
-        societe_creation = CASE WHEN (societe_creation IS NULL OR societe_creation = '') AND $9 <> '' THEN $9 ELSE societe_creation END,
-        societe_cloture = CASE WHEN (societe_cloture IS NULL OR societe_cloture = '') AND $10 <> '' THEN $10 ELSE societe_cloture END,
-        societe_link = CASE WHEN (societe_link IS NULL OR societe_link = '') AND $11 <> '' THEN $11 ELSE societe_link END,
-        societe_diffusion = CASE WHEN societe_diffusion = false AND $12 = true THEN $12 ELSE societe_diffusion END
-        WHERE link = $1 AND ` + idCond
+	q := `UPDATE results SET
+		website = CASE WHEN (website IS NULL OR website = '') AND $4 <> '' THEN $4 ELSE website END,
+		phone = CASE WHEN (phone IS NULL OR phone = '') AND $5 <> '' THEN $5 ELSE phone END,
+		societe_dirigeants = CASE WHEN (societe_dirigeants IS NULL OR societe_dirigeants = '') AND $6 <> '' THEN $6 ELSE societe_dirigeants END,
+		societe_siren = CASE WHEN (societe_siren IS NULL OR societe_siren = '') AND $7 <> '' THEN $7 ELSE societe_siren END,
+		societe_forme = CASE WHEN (societe_forme IS NULL OR societe_forme = '') AND $8 <> '' THEN $8 ELSE societe_forme END,
+		societe_creation = CASE WHEN (societe_creation IS NULL OR societe_creation = '') AND $9 <> '' THEN $9 ELSE societe_creation END,
+		societe_cloture = CASE WHEN (societe_cloture IS NULL OR societe_cloture = '') AND $10 <> '' THEN $10 ELSE societe_cloture END,
+		societe_link = CASE WHEN (societe_link IS NULL OR societe_link = '') AND $11 <> '' THEN $11 ELSE societe_link END,
+		societe_diffusion = CASE WHEN societe_diffusion = false AND $12 = true THEN $12 ELSE societe_diffusion END
+		WHERE link = $1 AND ` + idCond
 
-    args = append(args, e.Website, e.Phone, e.SocieteDirigeants, e.SocieteSiren, e.SocieteForme, e.SocieteCreation, e.SocieteCloture, e.SocieteLink, e.SocieteDiffusion)
+	args = append(args, e.Website, e.Phone, e.SocieteDirigeants, e.SocieteSiren, e.SocieteForme, e.SocieteCreation, e.SocieteCloture, e.SocieteLink, e.SocieteDiffusion)
 
-    _, err := r.db.ExecContext(ctx, q, args...)
-    return err
+	_, err := r.db.ExecContext(ctx, q, args...)
+	return err
 }
