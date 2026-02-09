@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"github.com/gosom/scrapemate"
 )
@@ -70,8 +69,6 @@ func (s *StatusManager) MarkFailed(ctx context.Context, job scrapemate.IJob) err
 	defer tx.Rollback()
 
 	q := `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`
-	log := scrapemate.GetLoggerFromContext(ctx)
-	log.Info(fmt.Sprintf("Marking job %s as failed", job.GetID()))
 	_, err = tx.ExecContext(ctx, q, statusFailed, job.GetID())
 	if err != nil {
 		return err
@@ -102,6 +99,14 @@ func (s *StatusManager) incrementParentFailedCounter(ctx context.Context, tx *sq
 	}
 
 	return nil
+}
+
+// MarkEnrichmentDone marks an enrichment job as done without any parent tracking.
+func (s *StatusManager) MarkEnrichmentDone(ctx context.Context, job scrapemate.IJob) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE gmaps_jobs SET status = $1 WHERE id = $2`,
+		statusDone, job.GetID())
+	return err
 }
 
 // checkAndMarkParentDone checks if all child jobs are done and marks the parent as done.
@@ -136,22 +141,27 @@ func (s *StatusManager) checkAndMarkParentDone(ctx context.Context, tx *sql.Tx, 
 
 	totalProcessed := completedCount + failedCount
 	if totalProcessed >= childCount && childCount > 0 {
-		_, err = tx.ExecContext(ctx, `UPDATE gmaps_jobs SET status = $1 WHERE id = $2`, statusDone, parentID.String)
+		// Only mark parent as done if it's not already done (prevents double completion events)
+		result, err := tx.ExecContext(ctx, `UPDATE gmaps_jobs SET status = $1 WHERE id = $2 AND status != $1`, statusDone, parentID.String)
 		if err != nil {
 			return err
 		}
 
-		var grandParentID sql.NullString
-		err = tx.QueryRowContext(ctx, `SELECT parent_id FROM gmaps_jobs WHERE id = $1`, parentID.String).Scan(&grandParentID)
-		if err == nil && !grandParentID.Valid {
-			var payload []byte
-			err = tx.QueryRowContext(ctx, `SELECT payload FROM gmaps_jobs WHERE id = $1`, parentID.String).Scan(&payload)
-			if err == nil {
-				s.apiClient.CallJobCompletionAPIAsync(ctx, parentID.String, payload)
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected > 0 {
+			// Only fire completion API if we actually changed the status
+			var grandParentID sql.NullString
+			err = tx.QueryRowContext(ctx, `SELECT parent_id FROM gmaps_jobs WHERE id = $1`, parentID.String).Scan(&grandParentID)
+			if err == nil && !grandParentID.Valid {
+				var payload []byte
+				err = tx.QueryRowContext(ctx, `SELECT payload FROM gmaps_jobs WHERE id = $1`, parentID.String).Scan(&payload)
+				if err == nil {
+					s.apiClient.CallJobCompletionAPIAsync(ctx, parentID.String, payload)
+				}
 			}
-		}
 
-		return s.checkAndMarkParentDone(ctx, tx, parentID.String)
+			return s.checkAndMarkParentDone(ctx, tx, parentID.String)
+		}
 	}
 
 	return nil

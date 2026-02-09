@@ -280,9 +280,6 @@ func (s *DirectorsService) getDirectorsFromInpiBySiret(siret string) *DirectorIn
 				}
 			}
 
-			log.Printf("getDirectorsFromInpiBySiret: Rate limited (429), retrying in %v for SIRET %s, attempt %d/%d",
-				waitTime, siret, attempt+1, retries)
-
 			if attempt < retries-1 {
 				time.Sleep(waitTime)
 				jwt = ""
@@ -293,8 +290,6 @@ func (s *DirectorsService) getDirectorsFromInpiBySiret(siret string) *DirectorIn
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("getDirectorsFromInpiBySiret: HTTP %d for SIRET %s, attempt %d/%d",
-				resp.StatusCode, siret, attempt+1, retries)
 			if attempt < retries-1 {
 				time.Sleep(time.Duration(1<<uint(attempt)) * time.Second)
 				continue

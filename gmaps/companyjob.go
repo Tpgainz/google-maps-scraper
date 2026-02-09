@@ -17,6 +17,20 @@ type CompanyDataChecker interface {
 	CheckCompanyDataExists(ctx context.Context, title, address, ownerID, organizationID string) (*entreprise.CompanyInfo, bool, error)
 }
 
+type CompanyEnrichmentResult struct {
+	PlaceLink         string
+	OwnerID           string
+	OrganizationID    string
+	SocieteDirigeants []string
+	SocieteSiren      string
+	SocieteForme      string
+	SocieteCreation   string
+	SocieteCloture    string
+	SocieteLink       string
+	SocieteDiffusion  bool
+	PappersURL        string
+}
+
 type CompanyJobOptions func(*CompanyJob)
 
 type CompanyJob struct {
@@ -25,11 +39,12 @@ type CompanyJob struct {
 	OrganizationID string
 	CompanyName    string
 	Address        string
-	Entry          *Entry
+	PlaceLink      string
 	ExitMonitor    exiter.Exiter
+	EnrichmentJobs []scrapemate.IJob `json:"-"`
 }
 
-func NewCompanyJob(companyName, address, ownerID, organizationID string, entry *Entry, opts ...CompanyJobOptions) *CompanyJob {
+func NewCompanyJob(companyName, address, ownerID, organizationID, placeLink string, opts ...CompanyJobOptions) *CompanyJob {
 	const (
 		defaultPrio       = scrapemate.PriorityHigh
 		defaultMaxRetries = 2
@@ -47,7 +62,7 @@ func NewCompanyJob(companyName, address, ownerID, organizationID string, entry *
 		Address:        address,
 		OwnerID:        ownerID,
 		OrganizationID: organizationID,
-		Entry:          entry,
+		PlaceLink:      placeLink,
 	}
 
 	for _, opt := range opts {
@@ -84,40 +99,37 @@ func (j *CompanyJob) Process(ctx context.Context, resp *scrapemate.Response) (an
 
 	logr := scrapemate.GetLoggerFromContext(ctx)
 
+	enrichResult := &CompanyEnrichmentResult{
+		PlaceLink:      j.PlaceLink,
+		OwnerID:        j.OwnerID,
+		OrganizationID: j.OrganizationID,
+	}
+
 	checker := GetCompanyDataCheckerFromContext(ctx)
 	if checker != nil {
 		existingData, exists, err := checker.CheckCompanyDataExists(ctx, j.CompanyName, j.Address, j.OwnerID, j.OrganizationID)
 		if err != nil {
-			logr.Info(fmt.Sprintf("Error checking existing company data for %s: %v", j.CompanyName, err))
+			logr.Info(fmt.Sprintf("CheckCompanyDataExists error for %s: %v", j.CompanyName, err))
 		} else if exists && existingData != nil {
-			logr.Info(fmt.Sprintf("Found existing company data in DB for %s at %s", j.CompanyName, j.Address))
-			j.Entry.SocieteDirigeants = existingData.SocieteDirigeants
-			j.Entry.SocieteForme = existingData.SocieteForme
-			j.Entry.SocieteCreation = existingData.SocieteCreation
-			j.Entry.SocieteCloture = existingData.SocieteCloture
-			j.Entry.SocieteSiren = existingData.SocieteSiren
-			j.Entry.SocieteLink = existingData.SocieteLink
-			j.Entry.SocieteDiffusion = existingData.SocieteDiffusion
+			enrichResult.SocieteDirigeants = existingData.SocieteDirigeants
+			enrichResult.SocieteForme = existingData.SocieteForme
+			enrichResult.SocieteCreation = existingData.SocieteCreation
+			enrichResult.SocieteCloture = existingData.SocieteCloture
+			enrichResult.SocieteSiren = existingData.SocieteSiren
+			enrichResult.SocieteLink = existingData.SocieteLink
+			enrichResult.SocieteDiffusion = existingData.SocieteDiffusion
 
-			if len(j.Entry.SocieteDirigeants) == 0 && j.Entry.SocieteSiren != "" {
-				logr.Info(fmt.Sprintf("No directors found in DB for %s, trying to get directors via service", 
-					j.CompanyName))
-
+			if len(enrichResult.SocieteDirigeants) == 0 && enrichResult.SocieteSiren != "" {
 				service := entreprise.NewService()
-				directorInfo := service.GetDirectors(j.Entry.SocieteSiren, "")
+				directorInfo := service.GetDirectors(enrichResult.SocieteSiren, "")
 				if directorInfo != nil && directorInfo.Nom != "" && directorInfo.Prenom != "" {
 					prenomFormatted := strings.ToUpper(string(directorInfo.Prenom[0])) + strings.ToLower(directorInfo.Prenom[1:])
 					directorName := directorInfo.Nom + " " + prenomFormatted
-					j.Entry.SocieteDirigeants = []string{directorName}
-					logr.Info(fmt.Sprintf("Found director for %s: %s", j.CompanyName, directorName))
+					enrichResult.SocieteDirigeants = []string{directorName}
 				}
 			}
 
-			if j.ExitMonitor != nil {
-				j.ExitMonitor.IncrPlacesCompleted(1)
-			}
-
-			return j.Entry, nil, nil
+			return enrichResult, nil, nil
 		}
 	}
 
@@ -125,51 +137,41 @@ func (j *CompanyJob) Process(ctx context.Context, resp *scrapemate.Response) (an
 	result, err := service.SearchCompany(j.CompanyName, j.Address)
 
 	if err != nil {
-		logr.Info(fmt.Sprintf("Service search failed for %s: %v", j.CompanyName, err))
-		return j.Entry, nil, nil
+		return enrichResult, nil, nil
 	}
 
-	if !result.Success {
-		logr.Info(fmt.Sprintf("Service search unsuccessful for %s: %s", j.CompanyName, result.Error))
-		return j.Entry, nil, nil
-	}
-
-	if len(result.Data) == 0 {
-		logr.Info(fmt.Sprintf("No data found for: %s", j.CompanyName))
-		return j.Entry, nil, nil
+	if !result.Success || len(result.Data) == 0 {
+		return enrichResult, nil, nil
 	}
 
 	company := result.Data[0]
-	j.Entry.SocieteDirigeants = company.SocieteDirigeants
-	j.Entry.SocieteForme = company.SocieteForme
-	j.Entry.SocieteCreation = company.SocieteCreation
-	j.Entry.SocieteCloture = company.SocieteCloture
-	j.Entry.SocieteSiren = company.SocieteSiren
-	j.Entry.SocieteLink = company.SocieteLink
-	j.Entry.SocieteDiffusion = company.SocieteDiffusion
-	j.Entry.PappersURL = company.PappersURL
-
-	logr.Info(fmt.Sprintf("Updated entry %s with service data: SIREN=%s, Directors=%v", 
-		j.Entry.Title, company.SocieteSiren, company.SocieteDirigeants))
+	enrichResult.SocieteDirigeants = company.SocieteDirigeants
+	enrichResult.SocieteForme = company.SocieteForme
+	enrichResult.SocieteCreation = company.SocieteCreation
+	enrichResult.SocieteCloture = company.SocieteCloture
+	enrichResult.SocieteSiren = company.SocieteSiren
+	enrichResult.SocieteLink = company.SocieteLink
+	enrichResult.SocieteDiffusion = company.SocieteDiffusion
+	enrichResult.PappersURL = company.PappersURL
 
 	if len(company.SocieteDirigeants) == 0 && company.SocieteSiren != "" {
-		logr.Info(fmt.Sprintf("No directors found for %s, trying to get directors via service", 
-			j.CompanyName))
-
 		directorInfo := service.GetDirectors(company.SocieteSiren, "")
 		if directorInfo != nil && directorInfo.Nom != "" && directorInfo.Prenom != "" {
 			prenomFormatted := strings.ToUpper(string(directorInfo.Prenom[0])) + strings.ToLower(directorInfo.Prenom[1:])
 			directorName := directorInfo.Nom + " " + prenomFormatted
-			j.Entry.SocieteDirigeants = []string{directorName}
-			logr.Info(fmt.Sprintf("Found director for %s: %s", j.CompanyName, directorName))
+			enrichResult.SocieteDirigeants = []string{directorName}
 		}
 	}
 
-	if j.ExitMonitor != nil {
-		j.ExitMonitor.IncrPlacesCompleted(1)
+	// If PappersURL is available, create a PappersJob for director scraping
+	if enrichResult.PappersURL != "" {
+		pappersJob := NewPappersJob(enrichResult.PappersURL, j.PlaceLink, j.OwnerID, j.OrganizationID,
+			WithPappersJobParentID(j.GetID()),
+		)
+		j.EnrichmentJobs = append(j.EnrichmentJobs, pappersJob)
 	}
 
-	return j.Entry, nil, nil
+	return enrichResult, nil, nil
 }
 
 type CompanyDataCheckerKey struct{}
@@ -182,7 +184,7 @@ func GetCompanyDataCheckerFromContext(ctx context.Context) CompanyDataChecker {
 }
 
 func (j *CompanyJob) UseInResults() bool {
-	return true
+	return false
 }
 
 func (j *CompanyJob) BrowserActions(ctx context.Context, page playwright.Page) scrapemate.Response {

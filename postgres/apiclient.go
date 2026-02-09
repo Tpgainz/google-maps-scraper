@@ -4,18 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"sync"
 	"time"
-
-	"github.com/gosom/scrapemate"
 )
 
 // APIClient handles HTTP API calls for revalidation and job completion.
 type APIClient struct {
-	revalidationURL   string
-	jobCompletionURL  string
-	httpClient        *http.Client
+	revalidationURL      string
+	jobCompletionURL     string
+	httpClient           *http.Client
+	revalidationMu       sync.Mutex
+	lastRevalidation     map[string]time.Time
 }
 
 // NewAPIClient creates a new APIClient with the given URLs.
@@ -24,21 +24,25 @@ func NewAPIClient(revalidationURL, jobCompletionURL string) *APIClient {
 		revalidationURL:  revalidationURL,
 		jobCompletionURL: jobCompletionURL,
 		httpClient:       &http.Client{Timeout: 10 * time.Second},
+		lastRevalidation: make(map[string]time.Time),
 	}
 }
 
 // CallRevalidationAPI calls the revalidation API for the given userID.
+// Debounces calls: skips if called within 5 seconds for the same user.
 func (c *APIClient) CallRevalidationAPI(ctx context.Context, userID string) {
 	if c.revalidationURL == "" || userID == "" {
-		log := scrapemate.GetLoggerFromContext(ctx)
-		if c.revalidationURL == "" {
-			log.Info(fmt.Sprintf("Skipping revalidation API call: revalidationURL is empty (userID=%s)", userID))
-		}
-		if userID == "" {
-			log.Info(fmt.Sprintf("Skipping revalidation API call: userID is empty (revalidationURL=%s)", c.revalidationURL))
-		}
 		return
 	}
+
+	// Debounce: skip if called within 5 seconds for the same user
+	c.revalidationMu.Lock()
+	if last, ok := c.lastRevalidation[userID]; ok && time.Since(last) < 5*time.Second {
+		c.revalidationMu.Unlock()
+		return
+	}
+	c.lastRevalidation[userID] = time.Now()
+	c.revalidationMu.Unlock()
 
 	payload := map[string]string{"userId": userID}
 	jsonData, err := json.Marshal(payload)
@@ -53,16 +57,11 @@ func (c *APIClient) CallRevalidationAPI(ctx context.Context, userID string) {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	log := scrapemate.GetLoggerFromContext(ctx)
-	log.Info(fmt.Sprintf("Calling revalidation API: %s", c.revalidationURL))
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return
 	}
 	defer resp.Body.Close()
-
-	log.Info("Revalidation API response successful")
 }
 
 // CallJobCompletionAPIAsync calls the job completion API asynchronously.
@@ -110,17 +109,11 @@ func (c *APIClient) CallJobCompletionAPIAsync(ctx context.Context, jobID string,
 
 		req.Header.Set("Content-Type", "application/json")
 
-		log := scrapemate.GetLoggerFromContext(ctx)
-		log.Info(fmt.Sprintf("Calling job completion API: %s", c.jobCompletionURL))
-
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			log.Error(fmt.Sprintf("Job completion API call failed: %v", err))
 			return
 		}
 		defer resp.Body.Close()
-
-		log.Info(fmt.Sprintf("Job completion API response successful (status: %d)", resp.StatusCode))
 	}()
 }
 

@@ -226,7 +226,6 @@ func (s *INPIService) authenticate() error {
 	s.token = authResp.Token
 	s.tokenExpiry = time.Now().Add(55 * time.Minute)
 
-	log.Printf("INPI authentication successful, token expires at %v", s.tokenExpiry)
 	return nil
 }
 
@@ -274,7 +273,6 @@ func (s *INPIService) SearchCompany(companyName, address string) (*SearchResult,
 	}
 
 	if len(formalities) == 0 {
-		log.Printf("No results found for company: %s", companyName)
 		return &SearchResult{
 			Success:      true,
 			Data:         []CompanyInfo{},
@@ -282,37 +280,24 @@ func (s *INPIService) SearchCompany(companyName, address string) (*SearchResult,
 		}, nil
 	}
 
-	log.Printf("INPI found %d formalities for company: %s", len(formalities), companyName)
-
 	var results []CompanyInfo
 	processedName := ProcessForSearch(companyName)
 	normalizedSearch := normalizeCompanyName(processedName)
 	searchNameLower := strings.ToLower(normalizedSearch)
 	parsedAddress := parseAddress(address)
 	
-	for i, formality := range formalities {
+	for _, formality := range formalities {
 		inpiCompany := s.parseFormalityToCompanyResponse(&formality)
 		companyInfo := s.transformINPIResponseToCompanyInfo(inpiCompany, address)
 		
-		matchScore := s.calculateMatchScore(searchNameLower, inpiCompany, address, parsedAddress)
-		companyInfo.MatchScore = matchScore
-		
-		log.Printf("Parsed formality %d: SIREN=%s, CompanyName=%s, PostalCode=%s, Directors=%v, MatchScore=%.2f", 
-			i+1, companyInfo.SocieteSiren, companyInfo.SocieteNom, inpiCompany.PostalCode, companyInfo.SocieteDirigeants, matchScore)
-		
+		companyInfo.MatchScore = s.calculateMatchScore(searchNameLower, inpiCompany, address, parsedAddress)
 		results = append(results, companyInfo)
 	}
 
 	if len(results) > 0 {
 		s.sortResultsByMatchScore(results)
-		
-		bestMatch := results[0]
-		log.Printf("Best match for '%s': SIREN=%s, CompanyName=%s, Score=%.2f", 
-			companyName, bestMatch.SocieteSiren, bestMatch.SocieteNom, bestMatch.MatchScore)
-		
-		if bestMatch.MatchScore < inpiMinScoreThreshold {
-			log.Printf("Warning: Low match score (%.2f) for '%s', best match is '%s' (SIREN: %s). Consider filtering out.", 
-				bestMatch.MatchScore, companyName, bestMatch.SocieteNom, bestMatch.SocieteSiren)
+
+		if results[0].MatchScore < inpiMinScoreThreshold {
 			return &SearchResult{
 				Success:      true,
 				Data:         []CompanyInfo{},
@@ -343,8 +328,6 @@ func (s *INPIService) searchByCompanyNameAndAddress(companyName, address, token 
 	}
 
 	fullURL := fmt.Sprintf("%s?%s", searchURL, params.Encode())
-	log.Printf("INPI search URL: %s (companyName=%s, departments=%s)", fullURL, processedName, params.Get("departments"))
-	log.Printf("INPI request headers: Authorization=Bearer %s... (token length: %d)", token[:min(20, len(token))], len(token))
 
 	req, err := http.NewRequest("GET", fullURL, nil)
 	if err != nil {
@@ -361,11 +344,8 @@ func (s *INPIService) searchByCompanyNameAndAddress(companyName, address, token 
 	defer resp.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
-	
-	log.Printf("INPI response status: %d, content-length: %d", resp.StatusCode, len(bodyBytes))
-	
+
 	if resp.StatusCode == http.StatusNotFound {
-		log.Printf("INPI search returned 404 for company: %s", companyName)
 		return []INPIFormality{}, nil
 	}
 
@@ -374,23 +354,12 @@ func (s *INPIService) searchByCompanyNameAndAddress(companyName, address, token 
 		return nil, fmt.Errorf("search failed: status %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	if len(bodyBytes) > 0 {
-		log.Printf("INPI raw response (first 1000 chars): %s", string(bodyBytes[:min(1000, len(bodyBytes))]))
-	}
-
 	var searchResults []INPIFormality
 	if err := json.Unmarshal(bodyBytes, &searchResults); err != nil {
 		log.Printf("INPI JSON decode error: %v, response body (first 1000 chars): %s", err, string(bodyBytes[:min(1000, len(bodyBytes))]))
 		return nil, fmt.Errorf("error decoding search response: %w", err)
 	}
 
-	log.Printf("INPI search returned %d results for company: %s", len(searchResults), companyName)
-	if len(searchResults) > 0 {
-		firstCompany := s.parseFormalityToCompanyResponse(&searchResults[0])
-		log.Printf("INPI first result SIREN: %s, CompanyName from response: %s", 
-			firstCompany.SIREN, 
-			firstCompany.CompanyName)
-	}
 	return searchResults, nil
 }
 

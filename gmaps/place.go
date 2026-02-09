@@ -18,13 +18,13 @@ type PlaceJobOptions func(*PlaceJob)
 
 type PlaceJob struct {
 	scrapemate.Job
-    OwnerID             string
+	OwnerID             string
 	OrganizationID      string
-	UsageInResultststs  bool
 	ExtractEmail        bool
 	ExtractBodacc       bool
 	ExitMonitor         exiter.Exiter
 	ExtractExtraReviews bool
+	EnrichmentJobs      []scrapemate.IJob `json:"-"`
 }
 
 func NewPlaceJob(parentID, langCode, u, ownerID, organizationID string, extractEmail, extraExtraReviews bool, opts ...PlaceJobOptions) *PlaceJob {
@@ -45,7 +45,6 @@ func NewPlaceJob(parentID, langCode, u, ownerID, organizationID string, extractE
 		},
 	}
 
-	job.UsageInResultststs = true
 	job.ExtractEmail = extractEmail
 	job.ExtractExtraReviews = extraExtraReviews
 	job.OwnerID = ownerID
@@ -106,7 +105,7 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 			opts = append(opts, WithEmailJobExitMonitor(j.ExitMonitor))
 		}
 
-		emailJob := NewEmailJob(j.ID, &entry, j.OwnerID, j.OrganizationID, opts...)
+		emailJob := NewEmailJob(j.ID, entry.Link, entry.WebSite, j.OwnerID, j.OrganizationID, opts...)
 		childJobs = append(childJobs, emailJob)
 	}
 
@@ -117,7 +116,7 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 			entry.Address,
 			j.OwnerID,
 			j.OrganizationID,
-			&entry,
+			entry.Link,
 			WithCompanyJobParentID(j.ID),
 			WithCompanyJobPriority(int(scrapemate.PriorityHigh)),
 		)
@@ -125,13 +124,14 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 	}
 
 	if len(childJobs) > 0 {
-		j.UsageInResultststs = false
-		return &entry, childJobs, nil
-	} else if j.ExitMonitor != nil {
+		j.EnrichmentJobs = childJobs
+	}
+
+	if j.ExitMonitor != nil {
 		j.ExitMonitor.IncrPlacesCompleted(1)
 	}
 
-	return &entry, nil, err
+	return &entry, nil, nil
 }
 
 func (j *PlaceJob) BrowserActions(ctx context.Context, page playwright.Page) scrapemate.Response {
@@ -251,7 +251,7 @@ func (j *PlaceJob) getReviewCount(data []byte) int {
 }
 
 func (j *PlaceJob) UseInResults() bool {
-	return j.UsageInResultststs
+	return true
 }
 
 const js = `

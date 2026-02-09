@@ -109,15 +109,8 @@ func (r *resultWriter) getRootParentJobID(ctx context.Context, jobID string) (st
 	}
 }
 
-func (r *resultWriter) incrementParentFailedCounter(ctx context.Context, parentID string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE gmaps_jobs SET child_jobs_failed = child_jobs_failed + 1 WHERE id = $1`, parentID)
-	return err
-}
-
 func (r *resultWriter) notifyRevalidation(ctx context.Context, entries []dbEntry) {
 	if r.apiClient.GetRevalidationURL() == "" {
-		log := scrapemate.GetLoggerFromContext(ctx)
-		log.Info(fmt.Sprintf("Skipping revalidation API call: revalidationURL is empty (entries=%v)", entries))
 		return
 	}
 
@@ -157,7 +150,6 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 
 			entry, ok := result.Data.(*gmaps.Entry)
 			if !ok || entry == nil {
-				log.Info(fmt.Sprintf("Skipping non-entry result (job=%T, data=%T)", result.Job, result.Data))
 				continue
 			}
 
@@ -205,39 +197,6 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				} else {
 					parentJobID = rootParentID
 				}
-			} else if job, ok := actualJob.(*gmaps.EmailExtractJob); ok {
-				userID = job.OwnerID
-				organizationID = job.OrganizationID
-
-				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
-				if err != nil {
-					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
-					parentJobID = job.ParentID
-				} else {
-					parentJobID = rootParentID
-				}
-			} else if job, ok := actualJob.(*gmaps.CompanyJob); ok {
-				userID = job.OwnerID
-				organizationID = job.OrganizationID
-
-				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
-				if err != nil {
-					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
-					parentJobID = job.ParentID
-				} else {
-					parentJobID = rootParentID
-				}
-			} else if job, ok := actualJob.(*gmaps.PappersJob); ok {
-				userID = job.OwnerID
-				organizationID = job.OrganizationID
-
-				rootParentID, err := r.getRootParentJobID(ctx, job.GetID())
-				if err != nil {
-					log.Error(fmt.Sprintf("Error getting root parent job ID: %v", err))
-					parentJobID = job.ParentID
-				} else {
-					parentJobID = rootParentID
-				}
 			}
 
 			isDuplicate, err := r.checkDuplicateURL(ctx, entry.Link, userID, organizationID)
@@ -247,29 +206,6 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			}
 
 			if isDuplicate {
-				_ = r.updateExistingIfEmpty(ctx, dbEntry{
-					UserID:            userID,
-					OrganizationID:    organizationID,
-					Link:              entry.Link,
-					Website:           entry.WebSite,
-					Phone:             entry.Phone,
-					SocieteDirigeants: strings.Join(entry.SocieteDirigeants, ","),
-					SocieteSiren:      entry.SocieteSiren,
-					SocieteForme:      entry.SocieteForme,
-					SocieteCreation:   entry.SocieteCreation,
-					SocieteCloture:    entry.SocieteCloture,
-					SocieteLink:       entry.SocieteLink,
-					SocieteDiffusion:  entry.SocieteDiffusion,
-				})
-
-				var directParentID string
-				if actualJob != nil {
-					directParentID, _ = r.getParentJobID(ctx, actualJob.GetID())
-					if directParentID != "" {
-						_ = r.incrementParentFailedCounter(ctx, directParentID)
-					}
-				}
-
 				continue
 			}
 
@@ -298,40 +234,12 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			}
 
 			key := userID + "|" + organizationID + "|" + entry.Link
-			if idx, ok := r.inMemoryIndex[key]; ok {
-				ex := &buff[idx]
-				ex.Emails = mergeUnique(ex.Emails, dbEntry.Emails)
-				if ex.SocieteDirigeants == "" && dbEntry.SocieteDirigeants != "" {
-					ex.SocieteDirigeants = dbEntry.SocieteDirigeants
-				}
-				if ex.SocieteSiren == "" && dbEntry.SocieteSiren != "" {
-					ex.SocieteSiren = dbEntry.SocieteSiren
-				}
-				if ex.SocieteForme == "" && dbEntry.SocieteForme != "" {
-					ex.SocieteForme = dbEntry.SocieteForme
-				}
-				if ex.SocieteCreation == "" && dbEntry.SocieteCreation != "" {
-					ex.SocieteCreation = dbEntry.SocieteCreation
-				}
-				if ex.SocieteCloture == "" && dbEntry.SocieteCloture != "" {
-					ex.SocieteCloture = dbEntry.SocieteCloture
-				}
-				if ex.SocieteLink == "" && dbEntry.SocieteLink != "" {
-					ex.SocieteLink = dbEntry.SocieteLink
-				}
-				if !ex.SocieteDiffusion && dbEntry.SocieteDiffusion {
-					ex.SocieteDiffusion = dbEntry.SocieteDiffusion
-				}
-				if ex.Website == "" && dbEntry.Website != "" {
-					ex.Website = dbEntry.Website
-				}
-				if ex.Phone == "" && dbEntry.Phone != "" {
-					ex.Phone = dbEntry.Phone
-				}
-			} else {
-				r.inMemoryIndex[key] = len(buff)
-				buff = append(buff, dbEntry)
+			if _, ok := r.inMemoryIndex[key]; ok {
+				// Duplicate within the same batch - skip silently
+				continue
 			}
+			r.inMemoryIndex[key] = len(buff)
+			buff = append(buff, dbEntry)
 
 			if len(buff) >= maxBatchSize {
 				err := r.batchSave(ctx, buff)
@@ -363,36 +271,10 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 	}
 }
 
-func mergeUnique(a, b []string) []string {
-	if len(b) == 0 {
-		return a
-	}
-	seen := make(map[string]struct{}, len(a)+len(b))
-	out := make([]string, 0, len(a)+len(b))
-	for _, s := range a {
-		if _, ok := seen[s]; ok {
-			continue
-		}
-		seen[s] = struct{}{}
-		out = append(out, s)
-	}
-	for _, s := range b {
-		if _, ok := seen[s]; ok {
-			continue
-		}
-		seen[s] = struct{}{}
-		out = append(out, s)
-	}
-	return out
-}
-
 func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}
-
-	log := scrapemate.GetLoggerFromContext(ctx)
-	log.Info(fmt.Sprintf("Saving %d entries", len(entries)))
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -431,46 +313,9 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Info(fmt.Sprintf("Successfully saved %d entries", len(entries)))
-
 	// Call revalidation API for unique user IDs
 	r.notifyRevalidation(ctx, entries)
 
 	return nil
 }
 
-func (r *resultWriter) updateExistingIfEmpty(ctx context.Context, e dbEntry) error {
-	if e.Link == "" || (e.UserID == "" && e.OrganizationID == "") {
-		return nil
-	}
-
-	var idCond string
-	var args []interface{}
-	if e.UserID != "" && e.OrganizationID != "" {
-		idCond = "(user_id = $2 OR organization_id = $3)"
-		args = []interface{}{e.Link, e.UserID, e.OrganizationID}
-	} else if e.UserID != "" {
-		idCond = "user_id = $2"
-		args = []interface{}{e.Link, e.UserID}
-	} else {
-		idCond = "organization_id = $2"
-		args = []interface{}{e.Link, e.OrganizationID}
-	}
-
-	q := `UPDATE results SET
-		website = CASE WHEN (website IS NULL OR website = '') AND $4 <> '' THEN $4 ELSE website END,
-		phone = CASE WHEN (phone IS NULL OR phone = '') AND $5 <> '' THEN $5 ELSE phone END,
-		societe_dirigeants = CASE WHEN (societe_dirigeants IS NULL OR societe_dirigeants = '') AND $6 <> '' THEN $6 ELSE societe_dirigeants END,
-		societe_siren = CASE WHEN (societe_siren IS NULL OR societe_siren = '') AND $7 <> '' THEN $7 ELSE societe_siren END,
-		societe_forme = CASE WHEN (societe_forme IS NULL OR societe_forme = '') AND $8 <> '' THEN $8 ELSE societe_forme END,
-		societe_creation = CASE WHEN (societe_creation IS NULL OR societe_creation = '') AND $9 <> '' THEN $9 ELSE societe_creation END,
-		societe_cloture = CASE WHEN (societe_cloture IS NULL OR societe_cloture = '') AND $10 <> '' THEN $10 ELSE societe_cloture END,
-		societe_link = CASE WHEN (societe_link IS NULL OR societe_link = '') AND $11 <> '' THEN $11 ELSE societe_link END,
-		societe_diffusion = CASE WHEN societe_diffusion = false AND $12 = true THEN $12 ELSE societe_diffusion END
-		WHERE link = $1 AND ` + idCond
-
-	args = append(args, e.Website, e.Phone, e.SocieteDirigeants, e.SocieteSiren, e.SocieteForme, e.SocieteCreation, e.SocieteCloture, e.SocieteLink, e.SocieteDiffusion)
-
-	_, err := r.db.ExecContext(ctx, q, args...)
-	return err
-}

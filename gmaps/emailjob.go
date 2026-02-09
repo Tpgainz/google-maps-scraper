@@ -19,18 +19,25 @@ var (
     ExcludedSuffixes = []string{".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 )
 
+type EmailEnrichmentResult struct {
+	PlaceLink      string
+	OwnerID        string
+	OrganizationID string
+	Emails         []string
+}
+
 type EmailExtractJobOptions func(*EmailExtractJob)
 
 type EmailExtractJob struct {
 	scrapemate.Job
 
-	OwnerID string
+	OwnerID        string
 	OrganizationID string
-	Entry       *Entry
-	ExitMonitor exiter.Exiter
+	PlaceLink      string
+	ExitMonitor    exiter.Exiter
 }
 
-func NewEmailJob(parentID string, entry *Entry, ownerID, organizationID string, opts ...EmailExtractJobOptions) *EmailExtractJob {
+func NewEmailJob(parentID string, placeLink, websiteURL, ownerID, organizationID string, opts ...EmailExtractJobOptions) *EmailExtractJob {
 	const (
 		defaultPrio       = scrapemate.PriorityHigh
 		defaultMaxRetries = 0
@@ -41,13 +48,13 @@ func NewEmailJob(parentID string, entry *Entry, ownerID, organizationID string, 
 			ID:         uuid.New().String(),
 			ParentID:   parentID,
 			Method:     "GET",
-			URL:        entry.WebSite,
+			URL:        websiteURL,
 			MaxRetries: defaultMaxRetries,
 			Priority:   defaultPrio,
 		},
 	}
 
-	job.Entry = entry
+	job.PlaceLink = placeLink
 	job.OwnerID = ownerID
 	job.OrganizationID = organizationID
 	for _, opt := range opts {
@@ -69,24 +76,20 @@ func (j *EmailExtractJob) Process(ctx context.Context, resp *scrapemate.Response
 		resp.Body = nil
 	}()
 
-	defer func() {
-		if j.ExitMonitor != nil {
-			j.ExitMonitor.IncrPlacesCompleted(1)
-		}
-	}()
-
-	log := scrapemate.GetLoggerFromContext(ctx)
-
-	log.Info("Processing email job", "url", j.URL)
+	result := &EmailEnrichmentResult{
+		PlaceLink:      j.PlaceLink,
+		OwnerID:        j.OwnerID,
+		OrganizationID: j.OrganizationID,
+	}
 
 	// if html fetch failed just return
 	if resp.Error != nil {
-		return j.Entry, nil, nil
+		return result, nil, nil
 	}
 
 	doc, ok := resp.Document.(*goquery.Document)
 	if !ok {
-		return j.Entry, nil, nil
+		return result, nil, nil
 	}
 
 	emails := docEmailExtractor(doc)
@@ -104,9 +107,13 @@ func (j *EmailExtractJob) Process(ctx context.Context, resp *scrapemate.Response
 		}
 	}
 
-	j.Entry.Emails = emails
+	result.Emails = emails
 
-	return j.Entry, nil, nil
+	return result, nil, nil
+}
+
+func (j *EmailExtractJob) UseInResults() bool {
+	return false
 }
 
 func (j *EmailExtractJob) ProcessOnFetchError() bool {

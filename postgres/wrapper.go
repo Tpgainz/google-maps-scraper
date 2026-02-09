@@ -20,60 +20,109 @@ type jobWrapper struct {
 
 // Process handles job processing and child job management.
 func (w *jobWrapper) Process(ctx context.Context, resp *scrapemate.Response) (any, []scrapemate.IJob, error) {
-	log := scrapemate.GetLoggerFromContext(ctx)
-	log.Info(fmt.Sprintf("jobWrapper.Process: Processing job %s (type: %T)", w.IJob.GetID(), w.IJob))
-
 	ctx = context.WithValue(ctx, providerKey{}, w.provider)
 	ctx = context.WithValue(ctx, gmaps.CompanyDataCheckerKey{}, w.provider)
 
 	data, nextJobs, err := w.IJob.Process(ctx, resp)
 
-	if err == nil {
-		_, isCompanyJob := w.IJob.(*gmaps.CompanyJob)
-		_, isPlaceJob := w.IJob.(*gmaps.PlaceJob)
-
-		if len(nextJobs) > 0 {
-			if isCompanyJob {
-				w.provider.pushChildJobsAsync(ctx, w.IJob, nextJobs)
-			} else if isPlaceJob {
-				if err := w.provider.pushChildJobsForPlaceJob(ctx, w.IJob, nextJobs); err != nil {
-					log.Error(fmt.Sprintf("jobWrapper.Process: Error pushing child jobs for place job: %v", err))
-					return data, nextJobs, fmt.Errorf("while pushing jobs: %w", err)
-				}
-			} else {
-				if err := w.provider.pushChildJobs(ctx, w.IJob, nextJobs); err != nil {
-					log.Error(fmt.Sprintf("jobWrapper.Process: Error pushing child jobs: %v", err))
-					return data, nextJobs, fmt.Errorf("while pushing jobs: %w", err)
-				}
-			}
-		}
-
-		if err := w.provider.statusManager.MarkDone(ctx, w.IJob, len(nextJobs)); err != nil {
-			return data, nextJobs, err
-		}
-
-		if gmapJob, ok := w.IJob.(*gmaps.GmapJob); ok {
-			w.provider.apiClient.CallRevalidationAPI(ctx, gmapJob.OwnerID)
-		}
-
-		if isCompanyJob {
-			return data, nil, err
-		}
-
-		var wrappedNextJobs []scrapemate.IJob
-		if len(nextJobs) > 0 {
-			wrappedNextJobs = make([]scrapemate.IJob, len(nextJobs))
-			for i := range nextJobs {
-				wrappedNextJobs[i] = &jobWrapper{IJob: nextJobs[i], provider: w.provider}
-			}
-		}
-
-		return data, wrappedNextJobs, err
+	if err != nil {
+		_ = w.provider.statusManager.MarkFailed(ctx, w.IJob)
+		return data, nil, err
 	}
 
-	_ = w.provider.statusManager.MarkFailed(ctx, w.IJob)
+	// Handle enrichment jobs (email, company, pappers) - fire-and-forget
+	if isEnrichmentJob(w.IJob) {
+		_ = w.provider.statusManager.MarkEnrichmentDone(ctx, w.IJob)
 
-	return data, nextJobs, err
+		// Direct UPDATE on results table based on result type
+		switch result := data.(type) {
+		case *gmaps.EmailEnrichmentResult:
+			go w.provider.updateResultEmails(context.Background(), result)
+		case *gmaps.CompanyEnrichmentResult:
+			go w.provider.updateResultCompanyData(context.Background(), result)
+			// If CompanyJob produced PappersJob(s), push them
+			if companyJob, ok := w.IJob.(*gmaps.CompanyJob); ok && len(companyJob.EnrichmentJobs) > 0 {
+				go w.provider.pushEnrichmentJobs(context.Background(), companyJob.EnrichmentJobs)
+			}
+		case *gmaps.PappersEnrichmentResult:
+			go w.provider.updateResultPappers(context.Background(), result)
+		}
+
+		return data, nil, nil
+	}
+
+	// Handle PlaceJob: check duplicate, copy enrichment data, push enrichment jobs
+	if placeJob, ok := w.IJob.(*gmaps.PlaceJob); ok {
+		entry, isEntry := data.(*gmaps.Entry)
+
+		// Check if this place already exists for this user/org
+		if isEntry && entry != nil {
+			isDup := w.provider.checkDuplicatePlace(ctx, entry.Link, placeJob.OwnerID, placeJob.OrganizationID)
+			if isDup {
+				_ = w.provider.statusManager.MarkFailed(ctx, w.IJob)
+				return nil, nil, nil
+			}
+
+			// Check if enrichment data already exists from another user/org
+			if placeJob.ExtractEmail || placeJob.ExtractBodacc {
+				existing := w.provider.findExistingEnrichmentData(ctx, entry.Title, entry.Address)
+				if existing != nil {
+					if len(existing.Emails) > 0 && len(entry.Emails) == 0 {
+						entry.Emails = existing.Emails
+					}
+					if existing.SocieteSiren != "" && entry.SocieteSiren == "" {
+						entry.SocieteDirigeants = existing.SocieteDirigeants
+						entry.SocieteSiren = existing.SocieteSiren
+						entry.SocieteForme = existing.SocieteForme
+						entry.SocieteCreation = existing.SocieteCreation
+						entry.SocieteCloture = existing.SocieteCloture
+						entry.SocieteLink = existing.SocieteLink
+						entry.SocieteDiffusion = existing.SocieteDiffusion
+					}
+					// Skip enrichment jobs since we already have the data
+					placeJob.EnrichmentJobs = nil
+				}
+			}
+		}
+
+		if err := w.provider.statusManager.MarkDone(ctx, w.IJob, 0); err != nil {
+			return data, nil, err
+		}
+		if len(placeJob.EnrichmentJobs) > 0 {
+			go w.provider.pushEnrichmentJobs(context.Background(), placeJob.EnrichmentJobs)
+		}
+		return data, nil, nil
+	}
+
+	log := scrapemate.GetLoggerFromContext(ctx)
+
+	// Handle GmapJob (search): push PlaceJobs to DB, don't return them to scrapemate
+	if gmapJob, ok := w.IJob.(*gmaps.GmapJob); ok {
+		if len(nextJobs) > 0 {
+			if err := w.provider.pushChildJobs(ctx, w.IJob, nextJobs); err != nil {
+				log.Error(fmt.Sprintf("jobWrapper.Process: Error pushing child jobs: %v", err))
+				return data, nil, fmt.Errorf("while pushing jobs: %w", err)
+			}
+		}
+		if err := w.provider.statusManager.MarkDone(ctx, w.IJob, len(nextJobs)); err != nil {
+			return data, nil, err
+		}
+		w.provider.apiClient.CallRevalidationAPI(ctx, gmapJob.OwnerID)
+		return data, nil, nil
+	}
+
+	// Default: any other job type
+	if len(nextJobs) > 0 {
+		if err := w.provider.pushChildJobs(ctx, w.IJob, nextJobs); err != nil {
+			log.Error(fmt.Sprintf("jobWrapper.Process: Error pushing child jobs: %v", err))
+			return data, nil, fmt.Errorf("while pushing jobs: %w", err)
+		}
+	}
+	if err := w.provider.statusManager.MarkDone(ctx, w.IJob, len(nextJobs)); err != nil {
+		return data, nil, err
+	}
+
+	return data, nil, nil
 }
 
 // ChildJobManager handles pushing child jobs to the database.
@@ -117,69 +166,6 @@ func (p *provider) pushChildJobs(ctx context.Context, parentJob scrapemate.IJob,
 	return tx.Commit()
 }
 
-// pushChildJobsAsync pushes child jobs asynchronously.
-func (p *provider) pushChildJobsAsync(ctx context.Context, parentJob scrapemate.IJob, childJobs []scrapemate.IJob) {
-	if len(childJobs) == 0 {
-		return
-	}
-
-	go func() {
-		if err := p.pushChildJobs(context.Background(), parentJob, childJobs); err != nil {
-			log := scrapemate.GetLoggerFromContext(ctx)
-			log.Error(fmt.Sprintf("Error pushing child jobs asynchronously: %v", err))
-		}
-	}()
-}
-
-// pushChildJobsForPlaceJob handles the special case of pushing child jobs for PlaceJob.
-func (p *provider) pushChildJobsForPlaceJob(ctx context.Context, parentJob scrapemate.IJob, childJobs []scrapemate.IJob) error {
-	if len(childJobs) == 0 {
-		return nil
-	}
-
-	tx, err := p.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	updateParentQuery := `UPDATE gmaps_jobs SET child_jobs_count = child_jobs_count + $1 WHERE id = $2`
-	_, err = tx.ExecContext(ctx, updateParentQuery, len(childJobs), parentJob.GetID())
-	if err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	go func() {
-		asyncCtx := context.Background()
-		asyncTx, err := p.db.BeginTx(asyncCtx, nil)
-		if err != nil {
-			log := scrapemate.GetLoggerFromContext(ctx)
-			log.Error(fmt.Sprintf("Error starting transaction for async child jobs: %v", err))
-			return
-		}
-		defer asyncTx.Rollback()
-
-		for _, childJob := range childJobs {
-			if err := p.pushJobWithParent(asyncCtx, asyncTx, childJob, parentJob.GetID()); err != nil {
-				log := scrapemate.GetLoggerFromContext(ctx)
-				log.Error(fmt.Sprintf("Error pushing child job asynchronously: %v", err))
-				continue
-			}
-		}
-
-		if err := asyncTx.Commit(); err != nil {
-			log := scrapemate.GetLoggerFromContext(ctx)
-			log.Error(fmt.Sprintf("Error committing async child jobs: %v", err))
-		}
-	}()
-
-	return nil
-}
-
 // pushJobWithParent inserts a job with a parent reference.
 func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrapemate.IJob, parentID string) error {
 	q := `INSERT INTO gmaps_jobs
@@ -187,18 +173,13 @@ func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrape
 		VALUES
 		($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`
 
-	log := scrapemate.GetLoggerFromContext(ctx)
-
 	actualJob := job
 	if wrapper, ok := job.(*jobWrapper); ok {
 		actualJob = wrapper.IJob
 	}
 
-	log.Info(fmt.Sprintf("pushJobWithParent: job type=%T, URL=%s, parentID=%s", actualJob, actualJob.GetURL(), parentID))
-
 	jsonJob, jobType, err := p.codecRegistry.EncodeJob(actualJob)
 	if err != nil {
-		log.Error(fmt.Sprintf("invalid job type in pushJobWithParent: %T", actualJob))
 		return fmt.Errorf("invalid job type in pushJobWithParent: %w", err)
 	}
 
@@ -213,7 +194,7 @@ func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrape
 		return fmt.Errorf("failed to marshal job: %w", err)
 	}
 
-	result, err := tx.ExecContext(ctx, q,
+	_, err = tx.ExecContext(ctx, q,
 		jsonJob.ID,
 		parentID,
 		jsonJob.Priority,
@@ -225,18 +206,6 @@ func (p *provider) pushJobWithParent(ctx context.Context, tx *sql.Tx, job scrape
 
 	if err != nil {
 		return fmt.Errorf("failed to insert job: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		_, err = tx.ExecContext(ctx, `UPDATE gmaps_jobs SET child_jobs_failed = child_jobs_failed + 1 WHERE id = $1`, parentID)
-		if err != nil {
-			return fmt.Errorf("failed to increment failed counter: %w", err)
-		}
 	}
 
 	return nil

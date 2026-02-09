@@ -2,7 +2,6 @@ package gmaps
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -12,17 +11,24 @@ import (
 	"github.com/gosom/scrapemate"
 )
 
+type PappersEnrichmentResult struct {
+	PlaceLink         string
+	OwnerID           string
+	OrganizationID    string
+	SocieteDirigeants []string
+}
+
 type PappersJobOptions func(*PappersJob)
 
 type PappersJob struct {
 	scrapemate.Job
 	OwnerID        string
 	OrganizationID string
-	Entry          *Entry
+	PlaceLink      string
 	ExitMonitor    exiter.Exiter
 }
 
-func NewPappersJob(pappersURL string, entry *Entry, ownerID, organizationID string, opts ...PappersJobOptions) *PappersJob {
+func NewPappersJob(pappersURL string, placeLink, ownerID, organizationID string, opts ...PappersJobOptions) *PappersJob {
 	const (
 		defaultPrio       = scrapemate.PriorityHigh
 		defaultMaxRetries = 2
@@ -36,7 +42,7 @@ func NewPappersJob(pappersURL string, entry *Entry, ownerID, organizationID stri
 			MaxRetries: defaultMaxRetries,
 			Priority:   defaultPrio,
 		},
-		Entry:          entry,
+		PlaceLink:      placeLink,
 		OwnerID:        ownerID,
 		OrganizationID: organizationID,
 	}
@@ -67,40 +73,24 @@ func (j *PappersJob) Process(ctx context.Context, resp *scrapemate.Response) (an
 		resp.Meta = nil
 	}()
 
-	defer func() {
-		if j.ExitMonitor != nil {
-			j.ExitMonitor.IncrPlacesCompleted(1)
-		}
-	}()
-
-	log := scrapemate.GetLoggerFromContext(ctx)
-
-	if resp.Error != nil {
-		log.Info(fmt.Sprintf("Pappers scraping failed for %s: %v", j.Entry.Title, resp.Error))
-		return j.Entry, nil, nil
+	result := &PappersEnrichmentResult{
+		PlaceLink:      j.PlaceLink,
+		OwnerID:        j.OwnerID,
+		OrganizationID: j.OrganizationID,
 	}
 
-	if resp.Document == nil {
-		log.Info(fmt.Sprintf("No document available for Pappers scraping: %s", j.Entry.Title))
-		return j.Entry, nil, nil
+	if resp.Error != nil || resp.Document == nil {
+		return result, nil, nil
 	}
 
 	doc, ok := resp.Document.(*goquery.Document)
 	if !ok {
-		log.Info(fmt.Sprintf("Could not convert document to goquery for: %s", j.Entry.Title))
-		return j.Entry, nil, nil
+		return result, nil, nil
 	}
 
-	directors := j.extractDirectors(doc)
+	result.SocieteDirigeants = j.extractDirectors(doc)
 
-	if len(directors) > 0 {
-		j.Entry.SocieteDirigeants = directors
-		log.Info(fmt.Sprintf("Scraped %d directors from Pappers for %s: %v", len(directors), j.Entry.Title, directors))
-	} else {
-		log.Info(fmt.Sprintf("No directors found on Pappers for: %s", j.Entry.Title))
-	}
-
-	return j.Entry, nil, nil
+	return result, nil, nil
 }
 
 func (j *PappersJob) extractDirectors(doc *goquery.Document) []string {
@@ -117,7 +107,7 @@ func (j *PappersJob) extractDirectors(doc *goquery.Document) []string {
 }
 
 func (j *PappersJob) UseInResults() bool {
-	return true
+	return false
 }
 
 func (j *PappersJob) ProcessOnFetchError() bool {

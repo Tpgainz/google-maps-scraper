@@ -62,12 +62,9 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 		addressUpper = strings.ToUpper(address)
 	}
 	query := generateSearchQuery(companyName, addressUpper)
-	
-	log.Printf("INSEE search for '%s' with query: %s", companyName, query)
-	
+
 	result, err := s.searchSiret(query)
 	if err != nil {
-		log.Printf("INSEE search failed: %v", err)
 		return &SearchResult{
 			Success: false,
 			Error:   err.Error(),
@@ -75,15 +72,12 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 	}
 	
 	if result == nil || len(result.Etablissements) == 0 {
-		log.Printf("No INSEE results found for company: %s", companyName)
 		return &SearchResult{
 			Success:      true,
 			Data:         []CompanyInfo{},
 			TotalResults: 0,
 		}, nil
 	}
-	
-	log.Printf("INSEE returned %d establishments", len(result.Etablissements))
 	
 	var allResults []ScoredResult
 	hasAddress := address != ""
@@ -125,7 +119,6 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 	}
 	
 	if len(allResults) == 0 || allResults[0].Score < MIN_SCORE_THRESHOLD {
-		log.Printf("No results above threshold (%.2f) for company: %s", MIN_SCORE_THRESHOLD, companyName)
 		return &SearchResult{
 			Success:      true,
 			Data:         []CompanyInfo{},

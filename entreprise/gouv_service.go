@@ -125,8 +125,6 @@ func (s *GOUVService) SearchCompany(companyName, address string) (*SearchResult,
 		}, nil
 	}
 
-	log.Printf("GOUV search URL: %s", searchURL)
-
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return &SearchResult{
@@ -165,8 +163,6 @@ func (s *GOUVService) SearchCompany(companyName, address string) (*SearchResult,
 		}, nil
 	}
 
-	log.Printf("GOUV search returned %d results for company: %s", len(searchResponse.Results), companyName)
-
 	if len(searchResponse.Results) == 0 {
 		return &SearchResult{
 			Success:      true,
@@ -178,28 +174,17 @@ func (s *GOUVService) SearchCompany(companyName, address string) (*SearchResult,
 	var results []CompanyInfo
 	companyNameLower := strings.ToLower(ProcessForSearch(companyName))
 	
-	for i, result := range searchResponse.Results {
+	for _, result := range searchResponse.Results {
 		companyInfo := s.transformGOUVToCompanyInfo(&result, address)
 		
-		matchScore := s.calculateGOUVMatchScore(companyNameLower, &result, address, &parsedAddress)
-		companyInfo.MatchScore = matchScore
-		
-		log.Printf("Parsed GOUV result %d: SIREN=%s, CompanyName=%s, PostalCode=%s, Directors=%v, MatchScore=%.2f", 
-			i+1, companyInfo.SocieteSiren, companyInfo.SocieteNom, result.Siege.CodePostal, companyInfo.SocieteDirigeants, matchScore)
-		
+		companyInfo.MatchScore = s.calculateGOUVMatchScore(companyNameLower, &result, address, &parsedAddress)
 		results = append(results, companyInfo)
 	}
 
 	if len(results) > 0 {
 		s.sortResultsByMatchScore(results)
-		
-		bestMatch := results[0]
-		log.Printf("Best GOUV match for '%s': SIREN=%s, CompanyName=%s, Score=%.2f", 
-			companyName, bestMatch.SocieteSiren, bestMatch.SocieteNom, bestMatch.MatchScore)
-		
-		if bestMatch.MatchScore < gouvMinScoreThreshold {
-			log.Printf("Warning: Low match score (%.2f) for '%s', best match is '%s' (SIREN: %s). Consider filtering out.", 
-				bestMatch.MatchScore, companyName, bestMatch.SocieteNom, bestMatch.SocieteSiren)
+
+		if results[0].MatchScore < gouvMinScoreThreshold {
 			return &SearchResult{
 				Success:      true,
 				Data:         []CompanyInfo{},
@@ -793,7 +778,6 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 		
 		radiusKm := radius
 		if radiusKm > 50 {
-			log.Printf("Radius supérieur à 50km, utilisation de 50km maximum, requestedRadius: %f", radius)
 			radiusKm = 50
 		}
 		urlParams.Set("radius", fmt.Sprintf("%f", radiusKm))
@@ -914,8 +898,6 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 		
 		searchURL = fmt.Sprintf("%s%s?%s", gouvBaseURL, gouvSearchEndpoint, searchParams.Encode())
 	}
-	
-	log.Printf("GOUV geographic search URL: %s", searchURL)
 	
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {

@@ -209,11 +209,10 @@ func (c *PlaceJobCodec) Encode(job scrapemate.IJob) (*JSONJob, error) {
 		MaxRetries: j.GetMaxRetries(),
 		JobType:    "place",
 		Metadata: map[string]interface{}{
-			"usage_in_results": j.UsageInResultststs,
-			"extract_email":    j.ExtractEmail,
-			"extract_bodacc":   j.ExtractBodacc,
-			"owner_id":         j.OwnerID,
-			"organization_id":  j.OrganizationID,
+			"extract_email":   j.ExtractEmail,
+			"extract_bodacc":  j.ExtractBodacc,
+			"owner_id":        j.OwnerID,
+			"organization_id": j.OrganizationID,
 		},
 	}
 
@@ -225,11 +224,6 @@ func (c *PlaceJobCodec) Encode(job scrapemate.IJob) (*JSONJob, error) {
 }
 
 func (c *PlaceJobCodec) Decode(jsonJob *JSONJob) (scrapemate.IJob, error) {
-	usageInResults, ok := jsonJob.Metadata["usage_in_results"].(bool)
-	if !ok {
-		return nil, fmt.Errorf("usage_in_results is missing or not a boolean")
-	}
-
 	extractEmail, ok := jsonJob.Metadata["extract_email"].(bool)
 	if !ok {
 		return nil, fmt.Errorf("extract_email is missing or not a boolean")
@@ -260,11 +254,10 @@ func (c *PlaceJobCodec) Decode(jsonJob *JSONJob) (scrapemate.IJob, error) {
 			MaxRetries: jsonJob.MaxRetries,
 			Priority:   jsonJob.Priority,
 		},
-		UsageInResultststs: usageInResults,
-		ExtractEmail:       extractEmail,
-		ExtractBodacc:      extractBodacc,
-		OwnerID:            ownerID,
-		OrganizationID:     organizationID,
+		ExtractEmail:   extractEmail,
+		ExtractBodacc:  extractBodacc,
+		OwnerID:        ownerID,
+		OrganizationID: organizationID,
 	}, nil
 }
 
@@ -287,7 +280,7 @@ func (c *EmailJobCodec) Encode(job scrapemate.IJob) (*JSONJob, error) {
 		MaxRetries: j.GetMaxRetries(),
 		JobType:    "email",
 		Metadata: map[string]interface{}{
-			"entry":           j.Entry,
+			"place_link":      j.PlaceLink,
 			"parent_id":       j.Job.ParentID,
 			"owner_id":        j.OwnerID,
 			"organization_id": j.OrganizationID,
@@ -302,24 +295,16 @@ func (c *EmailJobCodec) Encode(job scrapemate.IJob) (*JSONJob, error) {
 }
 
 func (c *EmailJobCodec) Decode(jsonJob *JSONJob) (scrapemate.IJob, error) {
-	parentIDI, ok := jsonJob.Metadata["parent_id"].(string)
-	if !ok {
-		return nil, fmt.Errorf("parent_id is missing or not a string")
-	}
+	parentIDI, _ := jsonJob.Metadata["parent_id"].(string)
 
-	entryMap, ok := jsonJob.Metadata["entry"].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("entry is missing or not an object")
-	}
-
-	entryBytes, err := json.Marshal(entryMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal entry: %w", err)
-	}
-
-	var entry gmaps.Entry
-	if err := json.Unmarshal(entryBytes, &entry); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal entry: %w", err)
+	// Read place_link; fallback to extracting from old "entry" format
+	placeLink, _ := jsonJob.Metadata["place_link"].(string)
+	if placeLink == "" {
+		if entryMap, ok := jsonJob.Metadata["entry"].(map[string]any); ok {
+			if link, ok := entryMap["link"].(string); ok {
+				placeLink = link
+			}
+		}
 	}
 
 	ownerID, ok := jsonJob.Metadata["owner_id"].(string)
@@ -337,15 +322,13 @@ func (c *EmailJobCodec) Decode(jsonJob *JSONJob) (scrapemate.IJob, error) {
 		parentID = *jsonJob.ParentID
 	}
 
-	job := gmaps.NewEmailJob(parentIDI, &entry, ownerID, organizationID)
+	job := gmaps.NewEmailJob(parentIDI, placeLink, jsonJob.URL, ownerID, organizationID)
 	job.Job.ID = jsonJob.ID
 	job.Job.ParentID = parentID
 	job.Job.URL = jsonJob.URL
 	job.Job.URLParams = jsonJob.URLParams
 	job.Job.MaxRetries = jsonJob.MaxRetries
 	job.Job.Priority = jsonJob.Priority
-	job.OwnerID = ownerID
-	job.OrganizationID = organizationID
 
 	return job, nil
 }
@@ -373,7 +356,7 @@ func (c *CompanyJobCodec) Encode(job scrapemate.IJob) (*JSONJob, error) {
 			"address":         j.Address,
 			"owner_id":        j.OwnerID,
 			"organization_id": j.OrganizationID,
-			"entry":           j.Entry,
+			"place_link":      j.PlaceLink,
 		},
 	}
 
@@ -405,14 +388,13 @@ func (c *CompanyJobCodec) Decode(jsonJob *JSONJob) (scrapemate.IJob, error) {
 		return nil, fmt.Errorf("organization_id is missing or not a string")
 	}
 
-	var entry gmaps.Entry
-	if entryMap, ok := jsonJob.Metadata["entry"].(map[string]any); ok {
-		entryBytes, err := json.Marshal(entryMap)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal entry: %w", err)
-		}
-		if err := json.Unmarshal(entryBytes, &entry); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal entry: %w", err)
+	// Read place_link; fallback to extracting from old "entry" format
+	placeLink, _ := jsonJob.Metadata["place_link"].(string)
+	if placeLink == "" {
+		if entryMap, ok := jsonJob.Metadata["entry"].(map[string]any); ok {
+			if link, ok := entryMap["link"].(string); ok {
+				placeLink = link
+			}
 		}
 	}
 
@@ -434,7 +416,7 @@ func (c *CompanyJobCodec) Decode(jsonJob *JSONJob) (scrapemate.IJob, error) {
 		OrganizationID: organizationID,
 		CompanyName:    companyName,
 		Address:        address,
-		Entry:          &entry,
+		PlaceLink:      placeLink,
 	}, nil
 }
 
@@ -459,7 +441,7 @@ func (c *PappersJobCodec) Encode(job scrapemate.IJob) (*JSONJob, error) {
 		Metadata: map[string]interface{}{
 			"owner_id":        j.OwnerID,
 			"organization_id": j.OrganizationID,
-			"entry":           j.Entry,
+			"place_link":      j.PlaceLink,
 		},
 	}
 
@@ -481,14 +463,13 @@ func (c *PappersJobCodec) Decode(jsonJob *JSONJob) (scrapemate.IJob, error) {
 		return nil, fmt.Errorf("organization_id is missing or not a string")
 	}
 
-	var entry gmaps.Entry
-	if entryMap, ok := jsonJob.Metadata["entry"].(map[string]any); ok {
-		entryBytes, err := json.Marshal(entryMap)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal entry: %w", err)
-		}
-		if err := json.Unmarshal(entryBytes, &entry); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal entry: %w", err)
+	// Read place_link; fallback to extracting from old "entry" format
+	placeLink, _ := jsonJob.Metadata["place_link"].(string)
+	if placeLink == "" {
+		if entryMap, ok := jsonJob.Metadata["entry"].(map[string]any); ok {
+			if link, ok := entryMap["link"].(string); ok {
+				placeLink = link
+			}
 		}
 	}
 
@@ -508,7 +489,7 @@ func (c *PappersJobCodec) Decode(jsonJob *JSONJob) (scrapemate.IJob, error) {
 		},
 		OwnerID:        ownerID,
 		OrganizationID: organizationID,
-		Entry:          &entry,
+		PlaceLink:      placeLink,
 	}, nil
 }
 
