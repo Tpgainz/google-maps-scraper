@@ -27,7 +27,7 @@ type CompanyEnrichmentResult struct {
 	SocieteCreation   string
 	SocieteCloture    string
 	SocieteLink       string
-	SocieteDiffusion  bool
+	SocieteDiffusion  *bool
 	PappersURL        string
 }
 

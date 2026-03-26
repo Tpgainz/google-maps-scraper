@@ -236,7 +236,8 @@ func (s *INSEEService) transformEtablissementToCompanyInfo(etab map[string]inter
 	}
 	
 	statutDiffusion, _ := etab["statutDiffusionEtablissement"].(string)
-	result.SocieteDiffusion = statutDiffusion == "O"
+	diffusionValue := statutDiffusion == "O"
+	result.SocieteDiffusion = &diffusionValue
 	
 	if result.SocieteSiren != "" && result.SocieteNom != "" {
 		result.PappersURL = CreatePappersURL(result.SocieteNom, result.SocieteSiren)

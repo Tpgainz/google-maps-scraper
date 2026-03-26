@@ -97,7 +97,8 @@ func (p *provider) CheckCompanyDataExists(ctx context.Context, title, address, o
 		data.SocieteLink = societeLink.String
 	}
 	if societeDiffusion.Valid {
-		data.SocieteDiffusion = societeDiffusion.Bool
+		v := societeDiffusion.Bool
+		data.SocieteDiffusion = &v
 	}
 
 	return data, true, nil

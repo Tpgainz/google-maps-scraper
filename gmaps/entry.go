@@ -100,7 +100,7 @@ type Entry struct {
 	SocieteCloture      string                 `json:"societe_cloture"`
 	SocieteSiren        string                 `json:"societe_siren"`
 	SocieteLink         string                 `json:"societe_link"`
-	SocieteDiffusion    bool                   `json:"societe_diffusion"`
+	SocieteDiffusion    *bool                  `json:"societe_diffusion"`
 	PappersURL          string                 `json:"pappers_url"`
 }
 

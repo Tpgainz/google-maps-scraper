@@ -33,7 +33,7 @@ type dbEntry struct {
 	SocieteCreation   string
 	SocieteCloture    string
 	SocieteLink       string
-	SocieteDiffusion  bool
+	SocieteDiffusion  *bool
 }
 
 // NewResultWriter creates a new ResultWriter backed by PostgreSQL.

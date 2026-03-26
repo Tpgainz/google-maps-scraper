@@ -244,7 +244,7 @@ type existingEnrichmentData struct {
 	SocieteCreation   string
 	SocieteCloture    string
 	SocieteLink       string
-	SocieteDiffusion  bool
+	SocieteDiffusion  *bool
 }
 
 // findExistingEnrichmentData looks up existing enrichment data by title+address
@@ -308,7 +308,8 @@ func (p *provider) findExistingEnrichmentData(ctx context.Context, title, addres
 		data.SocieteLink = link.String
 	}
 	if diffusion.Valid {
-		data.SocieteDiffusion = diffusion.Bool
+		v := diffusion.Bool
+		data.SocieteDiffusion = &v
 	}
 
 	if !hasData {

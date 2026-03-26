@@ -11,7 +11,7 @@ type CompanyInfo struct {
 	PappersURL        string   `json:"pappersURL"`
 	City              string   `json:"city"`
 	MatchScore        float64  `json:"matchScore,omitempty"`
-	SocieteDiffusion  bool     `json:"societeDiffusion"`
+	SocieteDiffusion  *bool    `json:"societeDiffusion"`
 }
 
 type SearchResult struct {
