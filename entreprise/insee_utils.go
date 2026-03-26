@@ -11,40 +11,40 @@ import (
 const MIN_SCORE_THRESHOLD = 200.0
 
 var typeVoieAbbreviations = map[string]string{
-	"RUE":      "RUE",
-	"AV":       "AVENUE",
-	"AVENUE":   "AVENUE",
-	"BD":       "BOULEVARD",
-	"BOULEVARD": "BOULEVARD",
-	"BLVD":     "BOULEVARD",
-	"PL":       "PLACE",
-	"PLACE":    "PLACE",
-	"CH":       "CHEMIN",
-	"CHEMIN":   "CHEMIN",
-	"IMP":      "IMPASSE",
-	"IMPASSE":  "IMPASSE",
-	"AL":       "ALLEE",
-	"ALLEE":    "ALLEE",
-	"CRS":      "COURS",
-	"COURS":    "COURS",
-	"PASS":     "PASSAGE",
-	"PASSAGE":  "PASSAGE",
-	"SQ":       "SQUARE",
-	"SQUARE":   "SQUARE",
-	"QT":       "QUAI",
-	"QUAI":     "QUAI",
-	"RTE":      "ROUTE",
-	"ROUTE":    "ROUTE",
-	"VOIE":     "VOIE",
-	"VILLA":    "VILLA",
-	"RES":      "RESIDENCE",
-	"RESIDENCE": "RESIDENCE",
-	"DOM":      "DOMAINE",
-	"DOMAINE":  "DOMAINE",
-	"LOT":      "LOTISSEMENT",
+	"RUE":         "RUE",
+	"AV":          "AVENUE",
+	"AVENUE":      "AVENUE",
+	"BD":          "BOULEVARD",
+	"BOULEVARD":   "BOULEVARD",
+	"BLVD":        "BOULEVARD",
+	"PL":          "PLACE",
+	"PLACE":       "PLACE",
+	"CH":          "CHEMIN",
+	"CHEMIN":      "CHEMIN",
+	"IMP":         "IMPASSE",
+	"IMPASSE":     "IMPASSE",
+	"AL":          "ALLEE",
+	"ALLEE":       "ALLEE",
+	"CRS":         "COURS",
+	"COURS":       "COURS",
+	"PASS":        "PASSAGE",
+	"PASSAGE":     "PASSAGE",
+	"SQ":          "SQUARE",
+	"SQUARE":      "SQUARE",
+	"QT":          "QUAI",
+	"QUAI":        "QUAI",
+	"RTE":         "ROUTE",
+	"ROUTE":       "ROUTE",
+	"VOIE":        "VOIE",
+	"VILLA":       "VILLA",
+	"RES":         "RESIDENCE",
+	"RESIDENCE":   "RESIDENCE",
+	"DOM":         "DOMAINE",
+	"DOMAINE":     "DOMAINE",
+	"LOT":         "LOTISSEMENT",
 	"LOTISSEMENT": "LOTISSEMENT",
-	"ZA":       "ZONE",
-	"ZONE":     "ZONE",
+	"ZA":          "ZONE",
+	"ZONE":        "ZONE",
 }
 
 var legalForms = []string{
@@ -53,22 +53,22 @@ var legalForms = []string{
 }
 
 type ParsedAddress struct {
-	PostalCode          string
-	NumVoie             string
+	PostalCode           string
+	NumVoie              string
 	ComplementNumeroVoie string
-	TypeVoie            string
-	LibelleVoie         string
-	LibelleCommune      string
-	AdresseBis          string
+	TypeVoie             string
+	LibelleVoie          string
+	LibelleCommune       string
+	AdresseBis           string
 }
 
 func normalizeCompanyName(name string) string {
 	normalized := strings.TrimSpace(name)
 	normalized = strings.ReplaceAll(normalized, "&", "ET")
 	normalized = strings.ToUpper(normalized)
-	
+
 	normalized = norm.NFD.String(normalized)
-	
+
 	var builder strings.Builder
 	for _, r := range normalized {
 		if unicode.IsMark(r) {
@@ -81,7 +81,7 @@ func normalizeCompanyName(name string) string {
 		}
 	}
 	normalized = builder.String()
-	
+
 	normalized = regexp.MustCompile(`[^\w\s]`).ReplaceAllString(normalized, " ")
 	normalized = regexp.MustCompile(`\s+`).ReplaceAllString(normalized, " ")
 	normalized = strings.TrimSpace(normalized)
@@ -111,13 +111,13 @@ func normalizeTypeVoie(abbrev string) string {
 func parseAddress(address string) ParsedAddress {
 	result := ParsedAddress{}
 	cleaned := normalizeCompanyName(address)
-	
+
 	postalCodeRe := regexp.MustCompile(`(\d{5})`)
 	postalCodeMatch := postalCodeRe.FindStringSubmatch(cleaned)
 	if len(postalCodeMatch) > 1 {
 		result.PostalCode = postalCodeMatch[1]
 	}
-	
+
 	parts := regexp.MustCompile(`[, ]+`).Split(cleaned, -1)
 	var filteredParts []string
 	for _, p := range parts {
@@ -125,7 +125,7 @@ func parseAddress(address string) ParsedAddress {
 			filteredParts = append(filteredParts, p)
 		}
 	}
-	
+
 	postalCodeIndex := -1
 	for i, p := range filteredParts {
 		if regexp.MustCompile(`^\d{5}$`).MatchString(p) {
@@ -133,17 +133,17 @@ func parseAddress(address string) ParsedAddress {
 			break
 		}
 	}
-	
+
 	if postalCodeIndex > 0 {
 		result.LibelleCommune = strings.Join(filteredParts[postalCodeIndex+1:], " ")
-		
+
 		addressPart := strings.Join(filteredParts[:postalCodeIndex], " ")
-		
+
 		typeVoiePatterns := []*regexp.Regexp{
 			regexp.MustCompile(`(?i)\b(RUE|AVENUE|BOULEVARD|PLACE|CHEMIN|IMPASSE|ALLEE|COURS|PASSAGE|SQUARE|QUAI|VOIE|ROUTE|VILLA|RESIDENCE|DOMAINE|LOTISSEMENT|ZONE)\s+`),
 			regexp.MustCompile(`(?i)\b(PL|AV|BD|BLVD|CH|IMP|AL|CRS|PASS|SQ|QT|RTE|RES|DOM|LOT|ZA)\s+`),
 		}
-		
+
 		typeVoieIndex := -1
 		for _, pattern := range typeVoiePatterns {
 			match := pattern.FindStringSubmatch(addressPart)
@@ -156,7 +156,7 @@ func parseAddress(address string) ParsedAddress {
 				break
 			}
 		}
-		
+
 		if typeVoieIndex >= 0 {
 			beforeTypeVoie := strings.TrimSpace(addressPart[:typeVoieIndex])
 			numVoieRe := regexp.MustCompile(`(?i)\b(\d+)(BIS|TER|QUATER|QUINQUIES)?\s*$`)
@@ -254,7 +254,7 @@ func parseAddress(address string) ParsedAddress {
 			}
 		}
 	}
-	
+
 	return result
 }
 
@@ -263,37 +263,37 @@ func generateSearchQuery(name string, address string) string {
 	nameQuery := `denominationUniteLegale:"` + normalized + `"`
 	var addressQuery string
 	var adresseBisQuery string
-	
+
 	if address != "" {
 		parsed := parseAddress(address)
-		
+
 		if parsed.PostalCode != "" {
 			postalCodePrefix := parsed.PostalCode[:2]
 			postalCodeCondition := `codePostalEtablissement:(` + parsed.PostalCode + ` OR ` + postalCodePrefix + `*)`
-			
+
 			nameQuery += ` AND ` + postalCodeCondition
 			addressQuery = postalCodeCondition
-			
+
 			if parsed.AdresseBis != "" {
 				adresseBisQuery = postalCodeCondition
 			}
-			
+
 			if parsed.NumVoie != "" {
 				addressQuery += ` AND numeroVoieEtablissement:` + parsed.NumVoie
 			}
-			
+
 			if parsed.TypeVoie != "" {
 				addressQuery += ` AND typeVoieEtablissement:` + parsed.TypeVoie
 			}
-			
+
 			if parsed.LibelleVoie != "" {
 				addressQuery += ` AND libelleVoieEtablissement:"` + normalizeCompanyName(parsed.LibelleVoie) + `"`
 			}
-			
+
 			if parsed.AdresseBis != "" {
 				adresseBisQuery += ` AND libelleVoieEtablissement:"` + normalizeCompanyName(parsed.AdresseBis) + `"`
 			}
-			
+
 			if parsed.LibelleCommune != "" {
 				addressQuery += ` AND libelleCommuneEtablissement:"` + normalizeCompanyName(parsed.LibelleCommune) + `"`
 				if parsed.AdresseBis != "" {
@@ -304,21 +304,21 @@ func generateSearchQuery(name string, address string) string {
 			if parsed.NumVoie != "" {
 				addressQuery += `numeroVoieEtablissement:` + parsed.NumVoie
 			}
-			
+
 			if parsed.TypeVoie != "" {
 				if addressQuery != "" {
 					addressQuery += ` AND `
 				}
 				addressQuery += `typeVoieEtablissement:` + parsed.TypeVoie
 			}
-			
+
 			if parsed.LibelleVoie != "" {
 				if addressQuery != "" {
 					addressQuery += ` AND `
 				}
 				addressQuery += `libelleVoieEtablissement:"` + normalizeCompanyName(parsed.LibelleVoie) + `"`
 			}
-			
+
 			if parsed.LibelleCommune != "" {
 				if addressQuery != "" {
 					addressQuery += ` AND `
@@ -333,7 +333,7 @@ func generateSearchQuery(name string, address string) string {
 		nameQuery = `denominationUniteLegale:"` + normalized + `"`
 		nameQuery += ` OR denominationUniteLegale:"` + normalized + `"~1`
 	}
-	
+
 	if addressQuery != "" {
 		result := `(` + nameQuery + `) OR (` + addressQuery + `)`
 		if adresseBisQuery != "" {
@@ -347,7 +347,7 @@ func generateSearchQuery(name string, address string) string {
 func findEnseignes(obj interface{}) []string {
 	found := make(map[string]bool)
 	findEnseignesRecursive(obj, found)
-	
+
 	var result []string
 	for k := range found {
 		result = append(result, k)
@@ -359,7 +359,7 @@ func findEnseignesRecursive(obj interface{}, found map[string]bool) {
 	if obj == nil {
 		return
 	}
-	
+
 	switch v := obj.(type) {
 	case map[string]interface{}:
 		for key, value := range v {
@@ -386,46 +386,46 @@ func findEnseignesRecursive(obj interface{}, found map[string]bool) {
 
 func matchesByName(etab map[string]interface{}, searchName string) bool {
 	normalizedSearch := normalizeCompanyName(searchName)
-	
+
 	ul, ok := etab["uniteLegale"].(map[string]interface{})
 	if !ok {
 		return false
 	}
-	
+
 	denomination, _ := ul["denominationUniteLegale"].(string)
 	denominationNorm := normalizeCompanyName(denomination)
 	if strings.Contains(denominationNorm, normalizedSearch) {
 		return true
 	}
-	
+
 	enseignes := findEnseignes(etab)
 	for _, enseigne := range enseignes {
 		if strings.Contains(normalizeCompanyName(enseigne), normalizedSearch) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
 func scoreResult(etab map[string]interface{}, searchName string, searchAddress string) float64 {
 	score := 0.0
 	normalizedSearch := normalizeCompanyName(searchName)
-	
+
 	ul, ok := etab["uniteLegale"].(map[string]interface{})
 	if !ok {
 		return score
 	}
-	
+
 	denomination, _ := ul["denominationUniteLegale"].(string)
 	denominationNorm := normalizeCompanyName(denomination)
-	
+
 	if denominationNorm == normalizedSearch {
 		score += 100.0
 	} else if strings.Contains(denominationNorm, normalizedSearch) {
 		score += 80.0
 	}
-	
+
 	enseignes := findEnseignes(etab)
 	var enseigneMatch string
 	for _, enseigne := range enseignes {
@@ -435,7 +435,7 @@ func scoreResult(etab map[string]interface{}, searchName string, searchAddress s
 			break
 		}
 	}
-	
+
 	if enseigneMatch != "" {
 		enseigneNorm := normalizeCompanyName(enseigneMatch)
 		if enseigneNorm == normalizedSearch {
@@ -452,7 +452,7 @@ func scoreResult(etab map[string]interface{}, searchName string, searchAddress s
 			}
 		}
 		searchWordsCount := len(filteredWords)
-		
+
 		if searchWordsCount > 0 {
 			matchedWords := 0
 			for _, word := range filteredWords {
@@ -470,7 +470,7 @@ func scoreResult(etab map[string]interface{}, searchName string, searchAddress s
 					matchedWords++
 				}
 			}
-			
+
 			wordMatchRatio := float64(matchedWords) / float64(searchWordsCount)
 			if wordMatchRatio >= 0.6 {
 				score += 60.0
@@ -478,7 +478,7 @@ func scoreResult(etab map[string]interface{}, searchName string, searchAddress s
 				score += 40.0
 			}
 		}
-		
+
 		var reverseMatch string
 		for _, enseigne := range enseignes {
 			enseigneNorm := normalizeCompanyName(enseigne)
@@ -487,25 +487,25 @@ func scoreResult(etab map[string]interface{}, searchName string, searchAddress s
 				break
 			}
 		}
-		
+
 		if reverseMatch != "" {
 			score += 60.0
 		} else if len(enseignes) == 0 {
 			score -= 10.0
 		}
 	}
-	
+
 	if searchAddress != "" {
 		parsed := parseAddress(searchAddress)
 		adresse, _ := etab["adresseEtablissement"].(map[string]interface{})
-		
+
 		if parsed.PostalCode != "" {
 			codePostal, _ := adresse["codePostalEtablissement"].(string)
 			if parsed.PostalCode == codePostal {
 				score += 50.0
 			}
 		}
-		
+
 		if parsed.NumVoie != "" {
 			numVoie, _ := adresse["numeroVoieEtablissement"].(string)
 			if numVoie != "" {
@@ -531,31 +531,31 @@ func scoreResult(etab map[string]interface{}, searchName string, searchAddress s
 				}
 			}
 		}
-		
+
 		if parsed.TypeVoie != "" {
 			typeVoie, _ := adresse["typeVoieEtablissement"].(string)
 			if parsed.TypeVoie == typeVoie {
 				score += 20.0
 			}
 		}
-		
+
 		if parsed.LibelleVoie != "" {
 			libelleVoie, _ := adresse["libelleVoieEtablissement"].(string)
 			libelleVoieNorm := normalizeCompanyName(libelleVoie)
 			parsedLibelleNorm := normalizeCompanyName(parsed.LibelleVoie)
-			
+
 			if parsedLibelleNorm == libelleVoieNorm {
 				score += 40.0
 			} else if strings.Contains(libelleVoieNorm, parsedLibelleNorm) {
 				score += 20.0
 			}
 		}
-		
+
 		if parsed.AdresseBis != "" {
 			libelleVoie, _ := adresse["libelleVoieEtablissement"].(string)
 			libelleVoieNorm := normalizeCompanyName(libelleVoie)
 			normalizedAdresseBis := normalizeCompanyName(parsed.AdresseBis)
-			
+
 			if libelleVoieNorm == normalizedAdresseBis {
 				score += 60.0
 			} else if strings.Contains(libelleVoieNorm, normalizedAdresseBis) {
@@ -565,10 +565,10 @@ func scoreResult(etab map[string]interface{}, searchName string, searchAddress s
 			}
 		}
 	}
-	
+
 	etatAdmin, _ := etab["etatAdministratifEtablissement"].(string)
 	etatAdminUL, _ := ul["etatAdministratifUniteLegale"].(string)
-	
+
 	periodes, ok := etab["periodesEtablissement"].([]interface{})
 	var periodeEtat string
 	var dateFin interface{}
@@ -579,22 +579,22 @@ func scoreResult(etab map[string]interface{}, searchName string, searchAddress s
 			dateFin, _ = periode["dateFin"]
 		}
 	}
-	
+
 	isActive := etatAdmin == "A" && etatAdminUL == "A" && periodeEtat == "A" && (dateFin == nil || dateFin == "")
 	if isActive {
 		score += 10.0
 	}
-	
+
 	etablissementSiege, _ := etab["etablissementSiege"].(bool)
 	if etablissementSiege {
 		score += 10.0
 	}
-	
+
 	isClosed := etatAdmin == "F" || etatAdminUL == "F" || (dateFin != nil && dateFin != "") || periodeEtat == "F"
 	if isClosed {
 		score -= 30.0
 	}
-	
+
 	return score
 }
 

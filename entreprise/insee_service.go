@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	inseeBaseURL      = "https://api.insee.fr/api-sirene/3.11"
+	inseeBaseURL       = "https://api.insee.fr/api-sirene/3.11"
 	inseeSirenEndpoint = "/siren"
 	inseeSiretEndpoint = "/siret"
 )
@@ -70,7 +70,7 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 			Error:   err.Error(),
 		}, err
 	}
-	
+
 	if result == nil || len(result.Etablissements) == 0 {
 		return &SearchResult{
 			Success:      true,
@@ -78,13 +78,13 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 			TotalResults: 0,
 		}, nil
 	}
-	
+
 	var allResults []ScoredResult
 	hasAddress := address != ""
-	
+
 	for _, etab := range result.Etablissements {
 		matchesName := matchesByName(etab, companyName)
-		
+
 		source := "nom"
 		if matchesName && hasAddress {
 			source = "nom+adresse"
@@ -93,7 +93,7 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 		} else {
 			source = "adresse"
 		}
-		
+
 		score := scoreResult(etab, companyName, address)
 		allResults = append(allResults, ScoredResult{
 			Etablissement: etab,
@@ -101,7 +101,7 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 			Source:        source,
 		})
 	}
-	
+
 	if len(allResults) == 0 {
 		return &SearchResult{
 			Success:      true,
@@ -109,7 +109,7 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 			TotalResults: 0,
 		}, nil
 	}
-	
+
 	for i := 0; i < len(allResults)-1; i++ {
 		for j := i + 1; j < len(allResults); j++ {
 			if allResults[j].Score > allResults[i].Score {
@@ -117,7 +117,7 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 			}
 		}
 	}
-	
+
 	if len(allResults) == 0 || allResults[0].Score < MIN_SCORE_THRESHOLD {
 		return &SearchResult{
 			Success:      true,
@@ -125,14 +125,14 @@ func (s *INSEEService) SearchCompany(companyName, address string) (*SearchResult
 			TotalResults: 0,
 		}, nil
 	}
-	
+
 	var results []CompanyInfo
 	for _, scored := range allResults {
 		companyInfo := s.transformEtablissementToCompanyInfo(scored.Etablissement)
 		companyInfo.MatchScore = scored.Score
 		results = append(results, companyInfo)
 	}
-	
+
 	return &SearchResult{
 		Success:      true,
 		Data:         results,
@@ -144,46 +144,46 @@ func (s *INSEEService) searchSiret(query string) (*INSEEResponse, error) {
 	encodedQuery := url.QueryEscape(query)
 	searchURL := fmt.Sprintf("%s%s?q=%s&nombre=200",
 		inseeBaseURL, inseeSiretEndpoint, encodedQuery)
-	
+
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating search request: %w", err)
 	}
-	
+
 	req.Header.Set("X-INSEE-Api-Key-Integration", s.apiKey)
 	req.Header.Set("Accept", "application/json;charset=utf-8")
-	
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error executing search request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		log.Printf("INSEE search failed: status %d, body: %s", resp.StatusCode, string(bodyBytes))
 		return nil, fmt.Errorf("search failed: status %d", resp.StatusCode)
 	}
-	
+
 	var data map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, fmt.Errorf("error decoding search response: %w", err)
 	}
-	
+
 	etablissements, ok := data["etablissements"].([]interface{})
 	if !ok || len(etablissements) == 0 {
 		return &INSEEResponse{
 			Etablissements: []map[string]interface{}{},
 		}, nil
 	}
-	
+
 	result := make([]map[string]interface{}, 0, len(etablissements))
 	for _, etab := range etablissements {
 		if etabMap, ok := etab.(map[string]interface{}); ok {
 			result = append(result, etabMap)
 		}
 	}
-	
+
 	return &INSEEResponse{
 		Etablissements: result,
 	}, nil
@@ -193,34 +193,34 @@ func (s *INSEEService) transformEtablissementToCompanyInfo(etab map[string]inter
 	result := CompanyInfo{
 		SocieteDirigeants: []string{},
 	}
-	
+
 	siret, _ := etab["siret"].(string)
 	siren, _ := etab["siren"].(string)
 	if siren == "" && len(siret) >= 9 {
 		siren = siret[:9]
 	}
 	result.SocieteSiren = siren
-	
+
 	ul, ok := etab["uniteLegale"].(map[string]interface{})
 	if ok {
 		denomination, _ := ul["denominationUniteLegale"].(string)
 		result.SocieteNom = denomination
-		
+
 		result.SocieteForme, _ = ul["categorieJuridiqueUniteLegale"].(string)
 		result.SocieteCreation, _ = ul["dateCreationUniteLegale"].(string)
 		result.SocieteCloture, _ = ul["dateDernierTraitementUniteLegale"].(string)
-		
+
 		nomUsage, _ := ul["nomUsageUniteLegale"].(string)
 		nom, _ := ul["nomUniteLegale"].(string)
 		prenom, _ := ul["prenomUsuelUniteLegale"].(string)
-		
+
 		dirigeantName := ""
 		if nomUsage != "" {
 			dirigeantName = nomUsage
 		} else if nom != "" {
 			dirigeantName = nom
 		}
-		
+
 		if prenom != "" {
 			if len(prenom) > 0 {
 				prenomFormatted := strings.ToUpper(string(prenom[0])) + strings.ToLower(prenom[1:])
@@ -234,15 +234,15 @@ func (s *INSEEService) transformEtablissementToCompanyInfo(etab map[string]inter
 			result.SocieteDirigeants = []string{dirigeantName}
 		}
 	}
-	
+
 	statutDiffusion, _ := etab["statutDiffusionEtablissement"].(string)
 	diffusionValue := statutDiffusion == "O"
 	result.SocieteDiffusion = &diffusionValue
-	
+
 	if result.SocieteSiren != "" && result.SocieteNom != "" {
 		result.PappersURL = CreatePappersURL(result.SocieteNom, result.SocieteSiren)
 		result.SocieteLink = fmt.Sprintf("https://www.inpi.fr/recherche-entreprise/entreprise/%s", result.SocieteSiren)
 	}
-	
+
 	return result
 }

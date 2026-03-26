@@ -470,15 +470,15 @@ func extractDirectorsFromInpiData(inpiData []map[string]interface{}) *DirectorIn
 func (s *DirectorsService) getDirectorsFromInpiSearch(siren string) *DirectorInfo {
 	requestBody := map[string]interface{}{
 		"query": map[string]interface{}{
-			"type":              "companies",
-			"selectedIds":       []interface{}{},
-			"sort":              "relevance",
-			"order":              "asc",
-			"nbResultsPerPage":  "1",
-			"page":              "1",
-			"filter":            map[string]interface{}{},
-			"q":                 siren,
-			"advancedSearch":    map[string]interface{}{},
+			"type":             "companies",
+			"selectedIds":      []interface{}{},
+			"sort":             "relevance",
+			"order":            "asc",
+			"nbResultsPerPage": "1",
+			"page":             "1",
+			"filter":           map[string]interface{}{},
+			"q":                siren,
+			"advancedSearch":   map[string]interface{}{},
 		},
 		"aggregations": []string{
 			"idt_cp_short",

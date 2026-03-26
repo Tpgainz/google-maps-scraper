@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	EmailRegex = regexp.MustCompile(`(?i)^[a-z0-9._%+\-]+@[a-z0-9\-]+\.[a-z\-]+$`)
-	ExcludedDomains = []string{"sentry", "example", "wix"}
-    ExcludedSuffixes = []string{".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+	EmailRegex       = regexp.MustCompile(`(?i)^[a-z0-9._%+\-]+@[a-z0-9\-]+\.[a-z\-]+$`)
+	ExcludedDomains  = []string{"sentry", "example", "wix"}
+	ExcludedSuffixes = []string{".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 )
 
 type EmailEnrichmentResult struct {

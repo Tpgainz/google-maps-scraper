@@ -193,4 +193,3 @@ func (j *CompanyJob) BrowserActions(ctx context.Context, page playwright.Page) s
 	resp.StatusCode = 200
 	return resp
 }
-

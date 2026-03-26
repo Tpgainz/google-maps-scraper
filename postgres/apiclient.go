@@ -11,11 +11,11 @@ import (
 
 // APIClient handles HTTP API calls for revalidation and job completion.
 type APIClient struct {
-	revalidationURL      string
-	jobCompletionURL     string
-	httpClient           *http.Client
-	revalidationMu       sync.Mutex
-	lastRevalidation     map[string]time.Time
+	revalidationURL  string
+	jobCompletionURL string
+	httpClient       *http.Client
+	revalidationMu   sync.Mutex
+	lastRevalidation map[string]time.Time
 }
 
 // NewAPIClient creates a new APIClient with the given URLs.

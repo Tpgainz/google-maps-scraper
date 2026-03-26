@@ -28,7 +28,6 @@ type Runner interface {
 	Close(context.Context) error
 }
 
-
 type Config struct {
 	Concurrency              int
 	MaxDepth                 int

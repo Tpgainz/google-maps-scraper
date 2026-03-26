@@ -17,7 +17,7 @@ type Service struct {
 
 var (
 	serviceInstance *Service
-	serviceOnce    sync.Once
+	serviceOnce     sync.Once
 )
 
 func NewService() *Service {

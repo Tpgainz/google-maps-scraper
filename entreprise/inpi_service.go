@@ -20,17 +20,16 @@ const (
 	inpiMinScoreThreshold = 200.0
 )
 
-
 type INPIService struct {
-	baseURL      string
-	authURL      string
-	username     string
-	password     string
-	token        string
-	tokenExpiry  time.Time
-	client       *http.Client
-	tokenMutex   sync.RWMutex
-	useDemoEnv   bool
+	baseURL     string
+	authURL     string
+	username    string
+	password    string
+	token       string
+	tokenExpiry time.Time
+	client      *http.Client
+	tokenMutex  sync.RWMutex
+	useDemoEnv  bool
 }
 
 var (
@@ -46,21 +45,21 @@ type INPIAuthRequest struct {
 type INPIAuthResponse struct {
 	Token string `json:"token"`
 	User  struct {
-		Roles              []string `json:"roles"`
-		ID                 int      `json:"id"`
-		Email              string   `json:"email"`
-		Firstname          string   `json:"firstname"`
-		Lastname           string   `json:"lastname"`
-		CivilityCode       string   `json:"civilityCode"`
-		Address1           string   `json:"address1"`
-		ZipCode            string   `json:"zipCode"`
-		City               string   `json:"city"`
-		CountryCode        string   `json:"countryCode"`
-		HasCompany         bool     `json:"hasCompany"`
-		IsManager          bool     `json:"isManager"`
-		OfficePhone        string   `json:"officePhone"`
-		LastLogin          string   `json:"lastLogin"`
-		Active             bool     `json:"active"`
+		Roles                []string `json:"roles"`
+		ID                   int      `json:"id"`
+		Email                string   `json:"email"`
+		Firstname            string   `json:"firstname"`
+		Lastname             string   `json:"lastname"`
+		CivilityCode         string   `json:"civilityCode"`
+		Address1             string   `json:"address1"`
+		ZipCode              string   `json:"zipCode"`
+		City                 string   `json:"city"`
+		CountryCode          string   `json:"countryCode"`
+		HasCompany           bool     `json:"hasCompany"`
+		IsManager            bool     `json:"isManager"`
+		OfficePhone          string   `json:"officePhone"`
+		LastLogin            string   `json:"lastLogin"`
+		Active               bool     `json:"active"`
 		CorrespondenceEmails []string `json:"correspondenceEmails"`
 	} `json:"user"`
 }
@@ -77,10 +76,10 @@ type INPIFormality struct {
 			PersonneMorale *struct {
 				Identite struct {
 					Entreprise struct {
-						Siren         string `json:"siren"`
-						Denomination  string `json:"denomination"`
+						Siren          string `json:"siren"`
+						Denomination   string `json:"denomination"`
 						FormeJuridique string `json:"formeJuridique"`
-						DateImmat     string `json:"dateImmat"`
+						DateImmat      string `json:"dateImmat"`
 					} `json:"entreprise"`
 				} `json:"identite"`
 				AdresseEntreprise struct {
@@ -105,9 +104,9 @@ type INPIFormality struct {
 						} `json:"descriptionPersonne"`
 					} `json:"entrepreneur"`
 					Entreprise struct {
-						Siren         string `json:"siren"`
+						Siren          string `json:"siren"`
 						FormeJuridique string `json:"formeJuridique"`
-						DateImmat     string `json:"dateImmat"`
+						DateImmat      string `json:"dateImmat"`
 					} `json:"entreprise"`
 				} `json:"identite"`
 				AdresseEntreprise struct {
@@ -151,17 +150,17 @@ func NewINPIService(username, password string, useDemoEnv bool) *INPIService {
 	inpiServiceOnce.Do(func() {
 		baseURL := "https://registre-national-entreprises.inpi.fr"
 		authURL := "https://registre-national-entreprises.inpi.fr/api/sso/login"
-		
+
 		if useDemoEnv {
 			baseURL = "https://registre-national-entreprises-pprod.inpi.fr"
 			authURL = "https://registre-national-entreprises-pprod.inpi.fr/api/sso/login"
 		}
 
 		inpiServiceInstance = &INPIService{
-			baseURL:  baseURL,
-			authURL:  authURL,
-			username: username,
-			password: password,
+			baseURL:    baseURL,
+			authURL:    authURL,
+			username:   username,
+			password:   password,
 			useDemoEnv: useDemoEnv,
 			client: &http.Client{
 				Timeout: 30 * time.Second,
@@ -285,11 +284,11 @@ func (s *INPIService) SearchCompany(companyName, address string) (*SearchResult,
 	normalizedSearch := normalizeCompanyName(processedName)
 	searchNameLower := strings.ToLower(normalizedSearch)
 	parsedAddress := parseAddress(address)
-	
+
 	for _, formality := range formalities {
 		inpiCompany := s.parseFormalityToCompanyResponse(&formality)
 		companyInfo := s.transformINPIResponseToCompanyInfo(inpiCompany, address)
-		
+
 		companyInfo.MatchScore = s.calculateMatchScore(searchNameLower, inpiCompany, address, parsedAddress)
 		results = append(results, companyInfo)
 	}
@@ -315,11 +314,11 @@ func (s *INPIService) SearchCompany(companyName, address string) (*SearchResult,
 
 func (s *INPIService) searchByCompanyNameAndAddress(companyName, address, token string) ([]INPIFormality, error) {
 	searchURL := fmt.Sprintf("%s%s", s.baseURL, inpiCompaniesEndpoint)
-	
+
 	params := url.Values{}
 	processedName := ProcessForSearch(companyName)
 	params.Set("companyName", processedName)
-	
+
 	if address != "" {
 		departmentNumber := ExtractDepartmentNumber(address)
 		if departmentNumber != "" {
@@ -415,7 +414,7 @@ func (s *INPIService) getCompanyBySIREN(siren, token string) (*INPICompanyRespon
 func findEnseignesInFormality(formality *INPIFormality) []string {
 	found := make(map[string]bool)
 	findEnseignesRecursiveInFormality(formality, found)
-	
+
 	var result []string
 	for k := range found {
 		result = append(result, k)
@@ -427,7 +426,7 @@ func findEnseignesRecursiveInFormality(obj interface{}, found map[string]bool) {
 	if obj == nil {
 		return
 	}
-	
+
 	switch v := obj.(type) {
 	case map[string]interface{}:
 		for key, value := range v {
@@ -462,7 +461,7 @@ func (s *INPIService) parseFormalityToCompanyResponse(formality *INPIFormality) 
 	if company.SIREN == "" {
 		company.SIREN = formality.Formality.Siren
 	}
-	
+
 	enseignes := findEnseignesInFormality(formality)
 	company.Enseignes = enseignes
 
@@ -530,20 +529,20 @@ func (s *INPIService) parseFormalityToCompanyResponse(formality *INPIFormality) 
 
 func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPICompanyResponse, searchAddress string, parsedAddress ParsedAddress) float64 {
 	score := 0.0
-	
+
 	companyNameNormalized := normalizeCompanyName(company.CompanyName)
 	companyNameLower := strings.ToLower(companyNameNormalized)
-	
+
 	var enseignesLower []string
 	for _, enseigne := range company.Enseignes {
 		enseigneNorm := normalizeCompanyName(enseigne)
 		enseignesLower = append(enseignesLower, strings.ToLower(enseigneNorm))
 	}
-	
+
 	if companyNameLower == "" && len(enseignesLower) == 0 {
 		return 0.0
 	}
-	
+
 	if searchAddress != "" {
 		searchDepartment := ExtractDepartmentNumber(searchAddress)
 		if searchDepartment != "" {
@@ -559,13 +558,13 @@ func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPIC
 			}
 		}
 	}
-	
+
 	wordsSearch := strings.Fields(searchNameLower)
-	
+
 	if len(wordsSearch) == 0 {
 		return 0.0
 	}
-	
+
 	if companyNameLower == searchNameLower {
 		score += 100.0
 	} else if strings.Contains(companyNameLower, searchNameLower) {
@@ -578,7 +577,7 @@ func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPIC
 	} else if strings.Contains(searchNameLower, companyNameLower) && len(companyNameLower) > 5 {
 		score += 30.0
 	}
-	
+
 	var enseigneMatch string
 	for _, enseigne := range enseignesLower {
 		if strings.Contains(enseigne, searchNameLower) {
@@ -586,7 +585,7 @@ func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPIC
 			break
 		}
 	}
-	
+
 	if enseigneMatch != "" {
 		if enseigneMatch == searchNameLower {
 			score += 90.0
@@ -596,10 +595,10 @@ func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPIC
 	} else if len(enseignesLower) == 0 && companyNameLower != "" {
 		score -= 10.0
 	}
-	
+
 	if companyNameLower != "" {
 		wordsCompany := strings.Fields(companyNameLower)
-		
+
 		matchedWords := 0
 		for _, word := range wordsSearch {
 			if len(word) > 2 {
@@ -632,7 +631,7 @@ func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPIC
 				}
 			}
 		}
-		
+
 		wordMatchRatio := float64(matchedWords) / float64(len(wordsSearch))
 		if wordMatchRatio >= 0.8 {
 			score += 30.0
@@ -641,18 +640,18 @@ func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPIC
 		} else {
 			score += wordMatchRatio * 10.0
 		}
-		
+
 		if len(wordsCompany) > len(wordsSearch)*2 {
 			score -= 20.0
 		}
 	}
-	
+
 	if searchAddress != "" {
 		cityFromAddress := ""
 		if parsedAddress.LibelleCommune != "" {
 			cityFromAddress = strings.ToLower(strings.TrimSpace(parsedAddress.LibelleCommune))
 		}
-		
+
 		if cityFromAddress != "" && company.City != "" {
 			companyCityLower := strings.ToLower(strings.TrimSpace(normalizeCompanyName(company.City)))
 			if cityFromAddress == companyCityLower {
@@ -661,11 +660,11 @@ func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPIC
 				score += 10.0
 			}
 		}
-		
+
 		if parsedAddress.PostalCode != "" && company.PostalCode == parsedAddress.PostalCode {
 			score += 50.0
 		}
-		
+
 		if parsedAddress.NumVoie != "" && company.Address != "" {
 			numVoieRe := regexp.MustCompile(`\b(\d+)`)
 			matches := numVoieRe.FindStringSubmatch(company.Address)
@@ -679,11 +678,11 @@ func (s *INPIService) calculateMatchScore(searchNameLower string, company *INPIC
 			}
 		}
 	}
-	
+
 	if company.ClosureDate != "" {
 		score -= 10.0
 	}
-	
+
 	return score
 }
 
@@ -696,7 +695,6 @@ func (s *INPIService) sortResultsByMatchScore(results []CompanyInfo) {
 		}
 	}
 }
-
 
 func (s *INPIService) transformINPIResponseToCompanyInfo(inpiCompany *INPICompanyResponse, originalAddress string) CompanyInfo {
 	city := inpiCompany.City
@@ -722,4 +720,3 @@ func (s *INPIService) transformINPIResponseToCompanyInfo(inpiCompany *INPICompan
 		SocieteLink:       fmt.Sprintf("https://www.inpi.fr/recherche-entreprise/entreprise/%s", inpiCompany.SIREN),
 	}
 }
-

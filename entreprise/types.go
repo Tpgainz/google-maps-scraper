@@ -20,4 +20,3 @@ type SearchResult struct {
 	Error        string        `json:"error,omitempty"`
 	TotalResults int           `json:"totalResults,omitempty"`
 }
-

@@ -726,4 +726,3 @@ func filterAndSortEntriesWithinRadius(entries []*Entry, lat, lon, radius float64
 
 	return slices.Collect(iter.Seq[*Entry](resultIterator))
 }
-

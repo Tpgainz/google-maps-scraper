@@ -18,8 +18,8 @@ func CreateSeedJobs(
 	langCode string,
 	r io.Reader,
 	maxDepth int,
-    email bool,
-    bodacc bool,
+	email bool,
+	bodacc bool,
 	geoCoordinates string,
 	zoom int,
 	radius float64,
@@ -100,11 +100,11 @@ func CreateSeedJobs(
 
 			var ownerID string
 			var organizationID string
-		if id != "" {
-			ownerID = id
+			if id != "" {
+				ownerID = id
 			}
 
-            job = gmaps.NewGmapJob(id, langCode, query, ownerID, organizationID, maxDepth, email, bodacc, geoCoordinates, zoom, opts...)
+			job = gmaps.NewGmapJob(id, langCode, query, ownerID, organizationID, maxDepth, email, bodacc, geoCoordinates, zoom, opts...)
 		} else {
 			jparams := gmaps.MapSearchParams{
 				Location: gmaps.MapLocation{

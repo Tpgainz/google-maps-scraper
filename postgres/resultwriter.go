@@ -318,4 +318,3 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 
 	return nil
 }
-

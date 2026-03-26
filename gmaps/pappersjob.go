@@ -113,4 +113,3 @@ func (j *PappersJob) UseInResults() bool {
 func (j *PappersJob) ProcessOnFetchError() bool {
 	return true
 }
-

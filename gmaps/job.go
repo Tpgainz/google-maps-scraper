@@ -22,12 +22,12 @@ type GmapJobOptions func(*GmapJob)
 type GmapJob struct {
 	scrapemate.Job
 
-	OwnerID string
-	OrganizationID string
-	MaxDepth     int
-	LangCode     string
-	ExtractEmail bool
-	ExtractBodacc bool
+	OwnerID             string
+	OrganizationID      string
+	MaxDepth            int
+	LangCode            string
+	ExtractEmail        bool
+	ExtractBodacc       bool
 	Deduper             deduper.Deduper
 	ExitMonitor         exiter.Exiter
 	ExtractExtraReviews bool
@@ -70,11 +70,11 @@ func NewGmapJob(
 			MaxRetries: maxRetries,
 			Priority:   prio,
 		},
-		MaxDepth:     maxDepth,
-		LangCode:     langCode,
-		ExtractEmail: extractEmail,
-		ExtractBodacc: extractBodacc,
-		OwnerID:      ownerID,
+		MaxDepth:       maxDepth,
+		LangCode:       langCode,
+		ExtractEmail:   extractEmail,
+		ExtractBodacc:  extractBodacc,
+		OwnerID:        ownerID,
 		OrganizationID: organizationID,
 	}
 

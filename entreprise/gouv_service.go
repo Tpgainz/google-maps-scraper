@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	gouvSearchEndpoint     = "/search"
-	gouvNearPointEndpoint  = "/near_point"
+	gouvSearchEndpoint    = "/search"
+	gouvNearPointEndpoint = "/near_point"
 	gouvBaseURL           = "https://recherche-entreprises.api.gouv.fr"
 	gouvMinScoreThreshold = 200.0
 	defaultRadius         = 0.01
@@ -26,63 +26,63 @@ type GOUVService struct {
 }
 
 type GOUVEntrepriseResult struct {
-	Siren                    string   `json:"siren"`
-	NomComplet               string   `json:"nom_complet"`
-	NomRaisonSociale         string   `json:"nom_raison_sociale"`
-	Sigle                    string   `json:"sigle"`
-	NombreEtablissements     int      `json:"nombre_etablissements"`
-	NombreEtablissementsOuverts int   `json:"nombre_etablissements_ouverts"`
-	Siege                    *GOUVSiege `json:"siege"`
-	ActivitePrincipale       string   `json:"activite_principale"`
-	CategorieEntreprise      string   `json:"categorie_entreprise"`
-	DateCreation             string   `json:"date_creation"`
-	DateFermeture            string   `json:"date_fermeture"`
-	EtatAdministratif        string   `json:"etat_administratif"`
-	NatureJuridique          string   `json:"nature_juridique"`
-	TrancheEffectifSalarie   string   `json:"tranche_effectif_salarie"`
-	StatutDiffusion          string   `json:"statut_diffusion"`
-	Dirigeants               []GOUVDirigeant `json:"dirigeants"`
-	MatchingEtablissements   []GOUVEtablissement `json:"matching_etablissements"`
+	Siren                       string              `json:"siren"`
+	NomComplet                  string              `json:"nom_complet"`
+	NomRaisonSociale            string              `json:"nom_raison_sociale"`
+	Sigle                       string              `json:"sigle"`
+	NombreEtablissements        int                 `json:"nombre_etablissements"`
+	NombreEtablissementsOuverts int                 `json:"nombre_etablissements_ouverts"`
+	Siege                       *GOUVSiege          `json:"siege"`
+	ActivitePrincipale          string              `json:"activite_principale"`
+	CategorieEntreprise         string              `json:"categorie_entreprise"`
+	DateCreation                string              `json:"date_creation"`
+	DateFermeture               string              `json:"date_fermeture"`
+	EtatAdministratif           string              `json:"etat_administratif"`
+	NatureJuridique             string              `json:"nature_juridique"`
+	TrancheEffectifSalarie      string              `json:"tranche_effectif_salarie"`
+	StatutDiffusion             string              `json:"statut_diffusion"`
+	Dirigeants                  []GOUVDirigeant     `json:"dirigeants"`
+	MatchingEtablissements      []GOUVEtablissement `json:"matching_etablissements"`
 }
 
 type GOUVSiege struct {
-	ActivitePrincipale       string   `json:"activite_principale"`
-	Adresse                  string   `json:"adresse"`
-	CodePostal               string   `json:"code_postal"`
-	Commune                  string   `json:"commune"`
-	LibelleCommune           string   `json:"libelle_commune"`
-	LibelleVoie              string   `json:"libelle_voie"`
-	NumeroVoie               string   `json:"numero_voie"`
-	TypeVoie                 string   `json:"type_voie"`
-	Latitude                 string   `json:"latitude"`
-	Longitude                string   `json:"longitude"`
-	DateCreation             string   `json:"date_creation"`
-	DateFermeture            string   `json:"date_fermeture"`
-	EstSiege                 bool     `json:"est_siege"`
-	EtatAdministratif       string   `json:"etat_administratif"`
-	NomCommercial            string   `json:"nom_commercial"`
-	ListeEnseignes           []string `json:"liste_enseignes"`
+	ActivitePrincipale string   `json:"activite_principale"`
+	Adresse            string   `json:"adresse"`
+	CodePostal         string   `json:"code_postal"`
+	Commune            string   `json:"commune"`
+	LibelleCommune     string   `json:"libelle_commune"`
+	LibelleVoie        string   `json:"libelle_voie"`
+	NumeroVoie         string   `json:"numero_voie"`
+	TypeVoie           string   `json:"type_voie"`
+	Latitude           string   `json:"latitude"`
+	Longitude          string   `json:"longitude"`
+	DateCreation       string   `json:"date_creation"`
+	DateFermeture      string   `json:"date_fermeture"`
+	EstSiege           bool     `json:"est_siege"`
+	EtatAdministratif  string   `json:"etat_administratif"`
+	NomCommercial      string   `json:"nom_commercial"`
+	ListeEnseignes     []string `json:"liste_enseignes"`
 }
 
 type GOUVDirigeant struct {
-	Nom       string   `json:"nom"`
-	Prenoms   string   `json:"prenoms"`
-	Qualite   string   `json:"qualite"`
+	Nom           string `json:"nom"`
+	Prenoms       string `json:"prenoms"`
+	Qualite       string `json:"qualite"`
 	TypeDirigeant string `json:"type_dirigeant"`
 }
 
 type GOUVEtablissement struct {
-	Siret                   string `json:"siret"`
-	CodePostal              string `json:"code_postal"`
-	Commune                 string `json:"commune"`
-	LibelleCommune          string `json:"libelle_commune"`
-	LibelleVoie             string `json:"libelle_voie"`
-	NumeroVoie              string `json:"numero_voie"`
-	TypeVoie                string `json:"type_voie"`
-	DateCreation            string `json:"date_creation"`
-	DateFermeture           string `json:"date_fermeture"`
-	EstSiege                bool   `json:"est_siege"`
-	EtatAdministratif       string `json:"etat_administratif"`
+	Siret             string `json:"siret"`
+	CodePostal        string `json:"code_postal"`
+	Commune           string `json:"commune"`
+	LibelleCommune    string `json:"libelle_commune"`
+	LibelleVoie       string `json:"libelle_voie"`
+	NumeroVoie        string `json:"numero_voie"`
+	TypeVoie          string `json:"type_voie"`
+	DateCreation      string `json:"date_creation"`
+	DateFermeture     string `json:"date_fermeture"`
+	EstSiege          bool   `json:"est_siege"`
+	EtatAdministratif string `json:"etat_administratif"`
 }
 
 type GOUVSearchResponse struct {
@@ -109,10 +109,10 @@ func NewGOUVService() *GOUVService {
 
 func (s *GOUVService) SearchCompany(companyName, address string) (*SearchResult, error) {
 	parsedAddress := parseAddress(address)
-	
+
 	var searchURL string
 	params := url.Values{}
-	
+
 	if parsedAddress.PostalCode != "" {
 		params.Set("q", ProcessForSearch(companyName))
 		params.Set("code_postal", parsedAddress.PostalCode)
@@ -173,10 +173,10 @@ func (s *GOUVService) SearchCompany(companyName, address string) (*SearchResult,
 
 	var results []CompanyInfo
 	companyNameLower := strings.ToLower(ProcessForSearch(companyName))
-	
+
 	for _, result := range searchResponse.Results {
 		companyInfo := s.transformGOUVToCompanyInfo(&result, address)
-		
+
 		companyInfo.MatchScore = s.calculateGOUVMatchScore(companyNameLower, &result, address, &parsedAddress)
 		results = append(results, companyInfo)
 	}
@@ -202,9 +202,9 @@ func (s *GOUVService) SearchCompany(companyName, address string) (*SearchResult,
 
 func (s *GOUVService) calculateGOUVMatchScore(searchNameLower string, result *GOUVEntrepriseResult, address string, parsedAddress *ParsedAddress) float64 {
 	score := 0.0
-	
+
 	searchDepartment := ExtractDepartmentNumber(address)
-	
+
 	if searchDepartment != "" && result.Siege != nil {
 		if result.Siege.CodePostal == "" {
 			return -50.0
@@ -221,7 +221,7 @@ func (s *GOUVService) calculateGOUVMatchScore(searchNameLower string, result *GO
 	nomComplet := strings.ToLower(normalizeCompanyName(result.NomComplet))
 	nomRaisonSociale := strings.ToLower(normalizeCompanyName(result.NomRaisonSociale))
 	sigle := strings.ToLower(normalizeCompanyName(result.Sigle))
-	
+
 	var nomCommercial string
 	var enseignes []string
 	if result.Siege != nil {
@@ -346,7 +346,7 @@ func (s *GOUVService) calculateGOUVMatchScore(searchNameLower string, result *GO
 
 	if address != "" && result.Siege != nil {
 		siege := result.Siege
-		
+
 		if parsedAddress.PostalCode != "" && siege.CodePostal == parsedAddress.PostalCode {
 			score += 50.0
 		}
@@ -492,48 +492,48 @@ func (s *GOUVService) sortResultsByMatchScore(results []CompanyInfo) {
 
 func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
 	const earthRadiusKm = 6371.0
-	
+
 	lat1Rad := lat1 * math.Pi / 180.0
 	lat2Rad := lat2 * math.Pi / 180.0
 	deltaLat := (lat2 - lat1) * math.Pi / 180.0
 	deltaLon := (lon2 - lon1) * math.Pi / 180.0
-	
+
 	a := math.Sin(deltaLat/2)*math.Sin(deltaLat/2) +
 		math.Cos(lat1Rad)*math.Cos(lat2Rad)*
 			math.Sin(deltaLon/2)*math.Sin(deltaLon/2)
 	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-	
+
 	return earthRadiusKm * c
 }
 
 func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address string) float64 {
 	score := 0.0
-	
+
 	if query == "" && address == "" {
 		return score
 	}
-	
+
 	var parsedAddress *ParsedAddress
 	if address != "" {
 		parsed := parseAddress(address)
 		parsedAddress = &parsed
 	}
-	
+
 	queryLower := strings.ToLower(normalizeCompanyName(query))
-	
+
 	nomComplet := strings.ToLower(normalizeCompanyName(result.NomComplet))
 	nomRaisonSociale := strings.ToLower(normalizeCompanyName(result.NomRaisonSociale))
 	sigle := strings.ToLower(normalizeCompanyName(result.Sigle))
-	
+
 	var nomCommercial string
 	var enseignes []string
 	if result.Siege != nil {
 		nomCommercial = strings.ToLower(normalizeCompanyName(result.Siege.NomCommercial))
 		enseignes = result.Siege.ListeEnseignes
 	}
-	
+
 	nameScore := 0.0
-	
+
 	if nomComplet == queryLower {
 		nameScore = 100.0
 	} else if strings.Contains(nomComplet, queryLower) {
@@ -547,7 +547,7 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 	} else if strings.Contains(queryLower, nomComplet) && len(nomComplet) > 5 {
 		nameScore = 30.0
 	}
-	
+
 	if nomRaisonSociale == queryLower {
 		if nameScore < 100.0 {
 			nameScore = 100.0
@@ -563,7 +563,7 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 			nameScore = scoreCandidate
 		}
 	}
-	
+
 	if sigle != "" && sigle == queryLower {
 		if nameScore < 90.0 {
 			nameScore = 90.0
@@ -573,7 +573,7 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 			nameScore = 70.0
 		}
 	}
-	
+
 	if nomCommercial == queryLower {
 		if nameScore < 90.0 {
 			nameScore = 90.0
@@ -583,7 +583,7 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 			nameScore = 70.0
 		}
 	}
-	
+
 	for _, enseigne := range enseignes {
 		enseigneLower := strings.ToLower(normalizeCompanyName(enseigne))
 		if enseigneLower == queryLower {
@@ -597,16 +597,16 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 			}
 		}
 	}
-	
+
 	score += nameScore
-	
+
 	wordsSearch := strings.Fields(queryLower)
 	if len(wordsSearch) > 0 && nameScore < 80.0 {
 		allNames := []string{nomComplet, nomRaisonSociale, nomCommercial}
 		for _, e := range enseignes {
 			allNames = append(allNames, strings.ToLower(normalizeCompanyName(e)))
 		}
-		
+
 		matchedWords := 0
 		for _, word := range wordsSearch {
 			if len(word) > 2 {
@@ -625,7 +625,7 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 			nextWord:
 			}
 		}
-		
+
 		wordMatchRatio := float64(matchedWords) / float64(len(wordsSearch))
 		if wordMatchRatio >= 0.8 {
 			score += 30.0
@@ -634,7 +634,7 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 		} else {
 			score += wordMatchRatio * 10.0
 		}
-		
+
 		longestName := ""
 		for _, name := range allNames {
 			if len(strings.Fields(name)) > len(strings.Fields(longestName)) {
@@ -646,14 +646,14 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 			score -= 20.0
 		}
 	}
-	
+
 	if address != "" && result.Siege != nil && parsedAddress != nil {
 		siege := result.Siege
-		
+
 		if parsedAddress.PostalCode != "" && siege.CodePostal == parsedAddress.PostalCode {
 			score += 50.0
 		}
-		
+
 		if parsedAddress.NumVoie != "" && siege.NumeroVoie != "" {
 			if parsedAddress.NumVoie == siege.NumeroVoie {
 				score += 50.0
@@ -679,7 +679,7 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 				score -= 20.0
 			}
 		}
-		
+
 		if parsedAddress.TypeVoie != "" && siege.TypeVoie != "" {
 			typeVoieNormalized := normalizeCompanyName(siege.TypeVoie)
 			searchTypeVoieNormalized := normalizeCompanyName(parsedAddress.TypeVoie)
@@ -687,7 +687,7 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 				score += 20.0
 			}
 		}
-		
+
 		if parsedAddress.LibelleVoie != "" && siege.LibelleVoie != "" {
 			libelleVoieNormalized := normalizeCompanyName(siege.LibelleVoie)
 			searchLibelleVoieNormalized := normalizeCompanyName(parsedAddress.LibelleVoie)
@@ -697,11 +697,11 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 				score += 20.0
 			}
 		}
-		
+
 		if parsedAddress.AdresseBis != "" {
 			libelleVoieNormalized := normalizeCompanyName(siege.LibelleVoie)
 			normalizedAdresseBis := normalizeCompanyName(parsedAddress.AdresseBis)
-			
+
 			if libelleVoieNormalized == normalizedAdresseBis {
 				score += 60.0
 			} else if strings.Contains(libelleVoieNormalized, normalizedAdresseBis) {
@@ -711,82 +711,82 @@ func scoreEntrepriseResult(result *GOUVEntrepriseResult, query string, address s
 			}
 		}
 	}
-	
+
 	if result.EtatAdministratif == "A" {
 		score += 10.0
 	} else if result.EtatAdministratif == "C" || result.EtatAdministratif == "F" {
 		score -= 30.0
 	}
-	
+
 	if result.Siege != nil && result.Siege.DateFermeture != "" {
 		score -= 10.0
 	}
-	
+
 	if result.Siege != nil && result.Siege.EstSiege {
 		score += 10.0
 	}
-	
+
 	return score
 }
 
 type GeographicSearchParams struct {
-	Query                      string
-	Address                    string
-	Lat                        *float64
-	Long                       *float64
-	Radius                     float64
-	CodePostal                 string
-	CodeCommune                string
-	ActivitePrincipale         string
-	SectionActivitePrincipale  string
-	Page                       *int
-	PerPage                    *int
+	Query                        string
+	Address                      string
+	Lat                          *float64
+	Long                         *float64
+	Radius                       float64
+	CodePostal                   string
+	CodeCommune                  string
+	ActivitePrincipale           string
+	SectionActivitePrincipale    string
+	Page                         *int
+	PerPage                      *int
 	LimiteMatchingEtablissements *int
-	Minimal                    *bool
-	Include                    string
-	PageEtablissements         *int
-	SortBySize                *bool
+	Minimal                      *bool
+	Include                      string
+	PageEtablissements           *int
+	SortBySize                   *bool
 }
 
 func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) (*SearchResult, error) {
 	hasTextSearch := params.Query != ""
 	hasGeographicFilters := params.CodePostal != "" || params.CodeCommune != "" || (params.Lat != nil && params.Long != nil)
-	
+
 	if !hasTextSearch && !hasGeographicFilters {
 		return &SearchResult{
 			Success: false,
 			Error:   "Au moins un paramètre de recherche (query, lat/long, ou code_postal) est requis",
 		}, nil
 	}
-	
+
 	var searchURL string
 	useNearPoint := false
-	
+
 	radius := params.Radius
 	if radius == 0 {
 		radius = defaultRadius
 	}
-	
+
 	if params.Lat != nil && params.Long != nil {
 		useNearPoint = true
 		urlParams := url.Values{}
 		urlParams.Set("lat", fmt.Sprintf("%f", *params.Lat))
 		urlParams.Set("long", fmt.Sprintf("%f", *params.Long))
-		
+
 		radiusKm := radius
 		if radiusKm > 50 {
 			radiusKm = 50
 		}
 		urlParams.Set("radius", fmt.Sprintf("%f", radiusKm))
-		
+
 		if params.ActivitePrincipale != "" {
 			urlParams.Set("activite_principale", params.ActivitePrincipale)
 		}
-		
+
 		if params.SectionActivitePrincipale != "" {
 			urlParams.Set("section_activite_principale", params.SectionActivitePrincipale)
 		}
-		
+
 		if params.PerPage != nil {
 			perPage := *params.PerPage
 			if perPage > 100 {
@@ -796,7 +796,7 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 		} else {
 			urlParams.Set("per_page", "100")
 		}
-		
+
 		if params.LimiteMatchingEtablissements != nil {
 			limite := *params.LimiteMatchingEtablissements
 			if limite < 1 {
@@ -807,57 +807,57 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 			}
 			urlParams.Set("limite_matching_etablissements", strconv.Itoa(limite))
 		}
-		
+
 		if params.Minimal != nil {
 			urlParams.Set("minimal", strconv.FormatBool(*params.Minimal))
 		}
-		
+
 		if params.Include != "" {
 			urlParams.Set("include", params.Include)
 		}
-		
+
 		if params.PageEtablissements != nil {
 			urlParams.Set("page_etablissements", strconv.Itoa(*params.PageEtablissements))
 		}
-		
+
 		if params.SortBySize != nil {
 			urlParams.Set("sort_by_size", strconv.FormatBool(*params.SortBySize))
 		}
-		
+
 		searchURL = fmt.Sprintf("%s%s?%s", gouvBaseURL, gouvNearPointEndpoint, urlParams.Encode())
 	} else {
 		searchParams := url.Values{}
-		
+
 		if hasTextSearch {
 			searchParams.Set("q", params.Query)
 		}
-		
+
 		postalCode := params.CodePostal
 		if postalCode == "" && params.Address != "" {
 			parsed := parseAddress(params.Address)
 			postalCode = parsed.PostalCode
 		}
-		
+
 		if postalCode != "" {
 			searchParams.Set("code_postal", postalCode)
 		}
-		
+
 		if params.CodeCommune != "" {
 			searchParams.Set("code_commune", params.CodeCommune)
 		}
-		
+
 		if params.ActivitePrincipale != "" {
 			searchParams.Set("activite_principale", params.ActivitePrincipale)
 		}
-		
+
 		if params.SectionActivitePrincipale != "" {
 			searchParams.Set("section_activite_principale", params.SectionActivitePrincipale)
 		}
-		
+
 		if params.Page != nil {
 			searchParams.Set("page", strconv.Itoa(*params.Page))
 		}
-		
+
 		if params.PerPage != nil {
 			perPage := *params.PerPage
 			if perPage > 25 {
@@ -865,7 +865,7 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 			}
 			searchParams.Set("per_page", strconv.Itoa(perPage))
 		}
-		
+
 		if params.LimiteMatchingEtablissements != nil {
 			limite := *params.LimiteMatchingEtablissements
 			if limite < 1 {
@@ -876,26 +876,26 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 			}
 			searchParams.Set("limite_matching_etablissements", strconv.Itoa(limite))
 		}
-		
+
 		if params.Minimal != nil {
 			searchParams.Set("minimal", strconv.FormatBool(*params.Minimal))
 		}
-		
+
 		if params.Include != "" {
 			searchParams.Set("include", params.Include)
 		}
-		
+
 		if params.PageEtablissements != nil {
 			searchParams.Set("page_etablissements", strconv.Itoa(*params.PageEtablissements))
 		}
-		
+
 		if params.SortBySize != nil {
 			searchParams.Set("sort_by_size", strconv.FormatBool(*params.SortBySize))
 		}
-		
+
 		searchURL = fmt.Sprintf("%s%s?%s", gouvBaseURL, gouvSearchEndpoint, searchParams.Encode())
 	}
-	
+
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return &SearchResult{
@@ -903,9 +903,9 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 			Error:   fmt.Sprintf("Error creating request: %v", err),
 		}, nil
 	}
-	
+
 	req.Header.Set("Accept", "application/json")
-	
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		log.Printf("GOUV geographic search error: %v, url: %s, query: %s, address: %s, lat: %v, long: %v, radius: %f",
@@ -916,9 +916,9 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 		}, nil
 	}
 	defer resp.Body.Close()
-	
+
 	bodyBytes, _ := io.ReadAll(resp.Body)
-	
+
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("GOUV geographic search failed: status %d, statusText: %s, url: %s, query: %s, address: %s, lat: %v, long: %v, radius: %f, body: %s",
 			resp.StatusCode, resp.Status, searchURL, params.Query, params.Address, params.Lat, params.Long, radius, string(bodyBytes))
@@ -927,7 +927,7 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 			Error:   fmt.Sprintf("Erreur HTTP %d: %s", resp.StatusCode, resp.Status),
 		}, nil
 	}
-	
+
 	var searchResponse GOUVSearchResponse
 	if err := json.Unmarshal(bodyBytes, &searchResponse); err != nil {
 		log.Printf("GOUV geographic search JSON decode error: %v, response body: %s", err, string(bodyBytes[:min(1000, len(bodyBytes))]))
@@ -936,15 +936,15 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 			Error:   fmt.Sprintf("Error decoding response: %v", err),
 		}, nil
 	}
-	
+
 	results := searchResponse.Results
-	
+
 	if params.Lat != nil && params.Long != nil && radius > 0 && !useNearPoint {
 		radiusKm := radius
 		if radiusKm > 50 {
 			radiusKm = 50
 		}
-		
+
 		var filteredResults []GOUVEntrepriseResult
 		for _, result := range results {
 			if result.Siege == nil {
@@ -953,13 +953,13 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 			if result.Siege.Latitude == "" || result.Siege.Longitude == "" {
 				continue
 			}
-			
+
 			resultLat, err1 := strconv.ParseFloat(result.Siege.Latitude, 64)
 			resultLong, err2 := strconv.ParseFloat(result.Siege.Longitude, 64)
 			if err1 != nil || err2 != nil {
 				continue
 			}
-			
+
 			distance := calculateDistance(*params.Lat, *params.Long, resultLat, resultLong)
 			if distance <= radiusKm {
 				filteredResults = append(filteredResults, result)
@@ -967,14 +967,14 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 		}
 		results = filteredResults
 	}
-	
+
 	type ScoredResult struct {
 		Result GOUVEntrepriseResult
 		Score  float64
 	}
-	
+
 	var scoredResults []ScoredResult
-	
+
 	if params.Query != "" || params.Address != "" {
 		for _, result := range results {
 			score := scoreEntrepriseResult(&result, params.Query, params.Address)
@@ -983,7 +983,7 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 				Score:  score,
 			})
 		}
-		
+
 		for i := 0; i < len(scoredResults)-1; i++ {
 			for j := i + 1; j < len(scoredResults); j++ {
 				if scoredResults[j].Score > scoredResults[i].Score {
@@ -991,7 +991,7 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 				}
 			}
 		}
-		
+
 		if useNearPoint {
 			var filteredScoredResults []ScoredResult
 			for _, item := range scoredResults {
@@ -1009,19 +1009,17 @@ func (s *GOUVService) SearchByGeographicLocation(params GeographicSearchParams) 
 			})
 		}
 	}
-	
+
 	var companyInfos []CompanyInfo
 	for _, item := range scoredResults {
 		companyInfo := s.transformGOUVToCompanyInfo(&item.Result, params.Address)
 		companyInfo.MatchScore = item.Score
 		companyInfos = append(companyInfos, companyInfo)
 	}
-	
+
 	return &SearchResult{
 		Success:      true,
 		Data:         companyInfos,
 		TotalResults: len(companyInfos),
 	}, nil
 }
-
-
