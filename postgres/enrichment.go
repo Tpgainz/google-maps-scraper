@@ -128,7 +128,7 @@ func (p *provider) updateResultCompanyData(ctx context.Context, result *gmaps.Co
 		societe_creation = CASE WHEN (societe_creation IS NULL OR societe_creation = '') AND $%d <> '' THEN $%d ELSE societe_creation END,
 		societe_cloture = CASE WHEN (societe_cloture IS NULL OR societe_cloture = '') AND $%d <> '' THEN $%d ELSE societe_cloture END,
 		societe_link = CASE WHEN (societe_link IS NULL OR societe_link = '') AND $%d <> '' THEN $%d ELSE societe_link END,
-		societe_diffusion = CASE WHEN societe_diffusion = false AND $%d = true THEN $%d ELSE societe_diffusion END,
+		societe_diffusion = CASE WHEN $%d IS NOT NULL AND (societe_diffusion IS NULL OR societe_diffusion = false) THEN $%d ELSE societe_diffusion END,
 		updated_at = NOW()
 		WHERE link = $1 AND %s`,
 		nextIdx, nextIdx,

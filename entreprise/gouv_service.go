@@ -464,7 +464,11 @@ func (s *GOUVService) transformGOUVToCompanyInfo(result *GOUVEntrepriseResult, o
 		pappersURL = CreatePappersURL(denominationCommerciale, result.Siren)
 	}
 
-	diffusionCommerciale := result.StatutDiffusion == "O"
+	var societeDiffusion *bool
+	if result.StatutDiffusion != "" {
+		diffusionValue := result.StatutDiffusion == "O"
+		societeDiffusion = &diffusionValue
+	}
 
 	return CompanyInfo{
 		SocieteSiren:      result.Siren,
@@ -476,7 +480,7 @@ func (s *GOUVService) transformGOUVToCompanyInfo(result *GOUVEntrepriseResult, o
 		City:              city,
 		PappersURL:        pappersURL,
 		SocieteLink:       fmt.Sprintf("https://recherche-entreprises.api.gouv.fr/search?q=%s", url.QueryEscape(result.Siren)),
-		SocieteDiffusion:  &diffusionCommerciale,
+		SocieteDiffusion:  societeDiffusion,
 	}
 }
 
