@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gosom/scrapemate"
+	"github.com/nyaruka/phonenumbers"
 
 	"github.com/gosom/google-maps-scraper/gmaps"
 )
@@ -22,7 +23,7 @@ type dbEntry struct {
 	Category          string
 	Address           string
 	Website           string
-	Phone             string
+	Phones            []string
 	Emails            []string
 	Latitude          float64
 	Longitude         float64
@@ -34,6 +35,86 @@ type dbEntry struct {
 	SocieteCloture    string
 	SocieteLink       string
 	SocieteDiffusion  *bool
+}
+
+// countryNameToCode maps common country names (as returned by Google Maps) to ISO 3166-1 alpha-2 codes.
+var countryNameToCode = map[string]string{
+	"france": "FR", "united states": "US", "united kingdom": "GB",
+	"germany": "DE", "spain": "ES", "italy": "IT", "canada": "CA",
+	"belgium": "BE", "switzerland": "CH", "netherlands": "NL",
+	"senegal": "SN", "côte d'ivoire": "CI", "ivory coast": "CI",
+	"morocco": "MA", "tunisia": "TN", "south africa": "ZA",
+	"nigeria": "NG", "australia": "AU", "japan": "JP", "brazil": "BR",
+	"portugal": "PT", "austria": "AT", "ireland": "IE", "poland": "PL",
+	"sweden": "SE", "norway": "NO", "denmark": "DK", "finland": "FI",
+	"greece": "GR", "czech republic": "CZ", "czechia": "CZ",
+	"romania": "RO", "hungary": "HU", "luxembourg": "LU",
+	"new zealand": "NZ", "mexico": "MX", "argentina": "AR",
+	"colombia": "CO", "chile": "CL", "india": "IN", "china": "CN",
+	"south korea": "KR", "thailand": "TH", "singapore": "SG",
+	"malaysia": "MY", "indonesia": "ID", "philippines": "PH",
+	"vietnam": "VN", "turkey": "TR", "israel": "IL",
+	"united arab emirates": "AE", "saudi arabia": "SA",
+	"egypt": "EG", "kenya": "KE", "ghana": "GH",
+	// French names (Google Maps can return localized names)
+	"états-unis": "US", "royaume-uni": "GB", "allemagne": "DE",
+	"espagne": "ES", "italie": "IT", "belgique": "BE",
+	"suisse": "CH", "pays-bas": "NL", "sénégal": "SN",
+	"maroc": "MA", "tunisie": "TN", "afrique du sud": "ZA",
+	"nigéria": "NG", "australie": "AU", "japon": "JP", "brésil": "BR",
+	"nouvelle-zélande": "NZ", "mexique": "MX", "argentine": "AR",
+	"colombie": "CO", "chili": "CL", "inde": "IN", "chine": "CN",
+	"corée du sud": "KR", "thaïlande": "TH", "singapour": "SG",
+	"malaisie": "MY", "indonésie": "ID", "turquie": "TR",
+	"israël": "IL", "émirats arabes unis": "AE", "arabie saoudite": "SA",
+	"égypte": "EG",
+}
+
+// phoneToPhones normalizes a phone string to E.164 using the place's country for context.
+// Google Maps often returns local-format numbers (e.g. "01 23 45 67 89" for France).
+func phoneToPhones(phone, country string) []string {
+	cleaned := strings.ReplaceAll(strings.TrimSpace(phone), " ", "")
+	if cleaned == "" {
+		return []string{}
+	}
+
+	// If already in international format, try to parse directly
+	if strings.HasPrefix(cleaned, "+") {
+		num, err := phonenumbers.Parse(cleaned, "")
+		if err == nil && phonenumbers.IsValidNumber(num) {
+			return []string{phonenumbers.Format(num, phonenumbers.E164)}
+		}
+		// Even if parsing fails, keep the raw cleaned number
+		return []string{cleaned}
+	}
+
+	// Try to resolve country code from the place's country name
+	regionCode := ""
+	if country != "" {
+		lower := strings.ToLower(strings.TrimSpace(country))
+		if code, ok := countryNameToCode[lower]; ok {
+			regionCode = code
+		} else if len(country) == 2 {
+			// Already an ISO code
+			regionCode = strings.ToUpper(country)
+		}
+	}
+
+	// Default to FR if we can't determine the country
+	if regionCode == "" {
+		regionCode = "FR"
+	}
+
+	num, err := phonenumbers.Parse(cleaned, regionCode)
+	if err == nil && phonenumbers.IsValidNumber(num) {
+		return []string{phonenumbers.Format(num, phonenumbers.E164)}
+	}
+
+	// Fallback: return raw cleaned number if parsing fails
+	if cleaned != "" {
+		return []string{cleaned}
+	}
+	return []string{}
 }
 
 // NewResultWriter creates a new ResultWriter backed by PostgreSQL.
@@ -219,7 +300,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 				Category:          entry.Category,
 				Address:           entry.Address,
 				Website:           entry.WebSite,
-				Phone:             entry.Phone,
+				Phones:            phoneToPhones(entry.Phone, entry.CompleteAddress.Country),
 				Emails:            entry.Emails,
 				Latitude:          entry.Latitude,
 				Longitude:         entry.Longtitude,
@@ -285,7 +366,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO results (
 			parent_id, user_id, organization_id, link, payload_type,
-			title, category, address, website, phone, emails, latitude, longitude,
+			title, category, address, website, phones, emails, latitude, longitude,
 			societe_dirigeants, societe_siren, societe_forme,
 			societe_effectif, societe_creation, societe_cloture, societe_link, societe_diffusion
 		) VALUES (
@@ -300,7 +381,7 @@ func (r *resultWriter) batchSave(ctx context.Context, entries []dbEntry) error {
 	for _, entry := range entries {
 		_, err := stmt.ExecContext(ctx,
 			entry.ParentID, entry.UserID, entry.OrganizationID, entry.Link, entry.PayloadType,
-			entry.Title, entry.Category, entry.Address, entry.Website, entry.Phone, entry.Emails,
+			entry.Title, entry.Category, entry.Address, entry.Website, entry.Phones, entry.Emails,
 			entry.Latitude, entry.Longitude, entry.SocieteDirigeants, entry.SocieteSiren, entry.SocieteForme,
 			entry.SocieteEffectif, entry.SocieteCreation, entry.SocieteCloture, entry.SocieteLink, entry.SocieteDiffusion,
 		)
